@@ -37,7 +37,6 @@ def update_frame(frame, new_frame, dim):
         dim.release()
         frame_array[:data.shape[0]] = data
         new_frame.value=True
-        time.sleep(0.1)
 
 class Dim(Structure):
     _fields_ = [('ID', c_int), ('T', c_int), ('B', c_int), ('L', c_int), ('R', c_int), ('scale', c_float),
