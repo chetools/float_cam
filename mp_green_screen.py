@@ -13,7 +13,7 @@ parser.add_argument('-i', '--ini', type=str)
 parser.add_argument('-f', '--find_cam', help='cycle through cameras', action='store_true')
 args = parser.parse_args()
 
-config_file = args.ini if args.ini else 'config.ini'
+config_file = args.ini if args.ini else './config.ini'
 config = configparser.ConfigParser()
 
 def find_cam(frame, new_frame, dim):
@@ -120,7 +120,6 @@ if __name__ == '__main__':
     read_config(dim)
 
 
-
     monitor_config_proc = ctx.Process(target=monitor_config_change, args=(dim,), daemon=True)
     monitor_config_proc.start()
 
@@ -128,6 +127,7 @@ if __name__ == '__main__':
         find_cam_proc = ctx.Process(target=find_cam, args=(frame, new_frame, dim), daemon=True)
         find_cam_proc.start()
     else:
+
         update_frame_proc = ctx.Process(target=update_frame, args=(frame, new_frame, dim), daemon=True)
         update_frame_proc.start()
 
