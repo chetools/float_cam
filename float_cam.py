@@ -23,6 +23,7 @@ def find_cam():
 
 def update_frame(frame, new_frame, dim, valid_ids):
     print(f'update frame valid: {valid_ids}')
+    old_ID = dim.ID
     cam = cv2.VideoCapture(valid_ids[dim.ID])
     scale=2
     w = cam.get(3)
@@ -37,8 +38,9 @@ def update_frame(frame, new_frame, dim, valid_ids):
             ret, img = cam.read()
             dim.acquire()
             if dim.change:
-                cam = cv2.VideoCapture(valid_ids[dim.ID])
-                print(cam)
+                if dim.ID != old_ID:
+                    cam = cv2.VideoCapture(valid_ids[dim.ID])
+                    old_ID = dim.ID
                 if not cam:
                     raise EnvironmentError
                 w = cam.get(3)
@@ -149,9 +151,9 @@ if __name__ == '__main__':
     new_frame = ctx.Value(c_bool, False)
     terminate = ctx.Value(c_bool, False)
     dim = mp.Value(Dim)
-    # valid_ids=find_cam()
-    valid_ids=[1,2,3]
-    print(f'valid: {valid_ids}')
+    valid_ids=find_cam()
+    # valid_ids=[1,2,3]
+    # print(f'valid: {valid_ids}')
     dim_init(dim)
 
 
