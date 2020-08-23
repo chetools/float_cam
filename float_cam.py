@@ -74,7 +74,7 @@ def update_frame(frame, new_frame, dim, valid_ids):
             dim.change=False
             dim.release()
             pass
-        time.sleep(0.1)
+        time.sleep(0.03)
 
 class Dim(Structure):
     _fields_ = [('change', c_bool), ('ID', c_int), ('T', c_int), ('H', c_int), ('L', c_int), ('W', c_int), ('scale', c_float),
