@@ -27,4 +27,4 @@ I am a Chemical Engineering professor and developed this tool for my online lect
 But found it to be even more beneficial with younger kids when pursuing my passion for 
 kindling the love of learning among middle and high school kids. 
 
-Fun, Intense, NO FEAR Learning - <mail:carloscomail@gmail.com>
+Fun, Intense, NO FEAR Learning - carloscomail@gmail.com
