@@ -115,9 +115,10 @@ def config(dim, window2, terminate):
                 dim.bright_loPass=int(values['bright_loPass'])
             dim.release()
         if event is None or event == sg.WIN_CLOSED or event == 'Exit':
+            terminate.value=True
             break
 
-    terminate.value=True
+
 
 def dim_init(dim):
     dim.ID=0
