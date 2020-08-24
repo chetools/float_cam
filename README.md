@@ -22,7 +22,11 @@ python -m venv .
 pip install -r requirements.txt
 python -m float_cam.py
 ```
-
+> On MacOS, replace .\Scripts\activate.bat with
+```shell
+source ./bin/activate
+```
+All features work, but selective transparency is not possible on MacOS.
 
 ## Who/Why?
 I am a Chemical Engineering professor at the University of Cincinnati and developed this tool for my 
