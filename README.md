@@ -31,7 +31,9 @@ source ./bin/activate
 pip install -r requirements.txt
 python -m float_cam.py
 ```
-All features work, but selective transparency is not possible on MacOS.
+
+All features work, but selective transparency is not possible on MacOS.  For convenience on a Mac, you may want
+to add the first 2 lines to your bash profile using a text editor: ~/.bash_profile
 
 ## Who/Why?
 I am a Chemical Engineering professor at the University of Cincinnati and developed this tool for my 
