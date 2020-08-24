@@ -22,9 +22,14 @@ python -m venv .
 pip install -r requirements.txt
 python -m float_cam.py
 ```
-> On MacOS, replace .\Scripts\activate.bat with
+> On MacOS, replace (carlosco with your username and adapt the path according to your setup)
 ```shell
+. /Users/carlosco/anaconda3/etc/profile.d/conda.sh
+conda activate base
+python -m venv .
 source ./bin/activate
+pip install -r requirements.txt
+python -m float_cam.py
 ```
 All features work, but selective transparency is not possible on MacOS.
 
