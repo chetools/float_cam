@@ -25,9 +25,9 @@ python -m float_cam.py
 
 
 ## Who/Why?
-I am a Chemical Engineering professor at UC and developed this tool for my online lectures. 
-But found it to be even more beneficial with younger kids when pursuing my passion for 
-sparking the love of learning among middle and high school kids.
+I am a Chemical Engineering professor at the University of Cincinnati and developed this tool for my 
+online lectures. My college students love it, but middle and high school kids whom I teach and 
+inspire to love STEM, get an absolute kick from this.
 
 Intense, NO FEAR Learning for Kids - you'd be amazed what your kids can accomplish
  with the right online environment - carloscomail@gmail.com
