@@ -22,18 +22,9 @@ python -m venv .
 pip install -r requirements.txt
 python -m float_cam.py
 ```
-> On MacOS, replace (carlosco with your username and adapt the path according to your setup)
-```shell
-. /Users/carlosco/anaconda3/etc/profile.d/conda.sh
-conda activate base
-python -m venv .
-source ./bin/activate
-pip install -r requirements.txt
-python -m float_cam.py
-```
-
-All features work, but selective transparency is not possible on MacOS.  For convenience on a Mac, you may want
-to add the first 2 lines to your bash profile using a text editor: ~/.bash_profile
+> On MacOS, the installation with Anaconda depends on whether the OS has been upgraded to Catalina
+> https://docs.anaconda.com/anaconda/install/mac-os/
+> All features work, but selective transparency is not possible on MacOS.
 
 ## Who/Why?
 I am a Chemical Engineering professor at the University of Cincinnati and developed this tool for my 
