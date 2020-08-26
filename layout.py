@@ -24,13 +24,13 @@ def make_layout(valid_ids):
 
     chroma_layout = [
         [sg.Text('Hue LoPass', font=('',15), pad=(10,(12,0))),
-         sg.Slider(range=(1, 100),orientation='h',size=(20, 20), default_value=40,key='hue_loPass',enable_events=True)],
+         sg.Slider(range=(1, 255),orientation='h',size=(20, 20), default_value=40,key='hue_loPass',enable_events=True)],
         [sg.Text('Hue HiPass', font=('',15), pad=(10,(12,0))),
-         sg.Slider(range=(1, 100), orientation='h',size=(20, 20), default_value=90, key='hue_hiPass',enable_events=True)],
+         sg.Slider(range=(1, 255), orientation='h',size=(20, 20), default_value=90, key='hue_hiPass',enable_events=True)],
         [sg.Text('Sat LoPass', font=('',15), pad=(10,(12,0))),
-         sg.Slider(range=(1, 100), orientation='h',size=(20, 20), default_value=50, key='sat_loPass',enable_events=True)],
+         sg.Slider(range=(1, 255), orientation='h',size=(20, 20), default_value=50, key='sat_loPass',enable_events=True)],
         [sg.Text('Bright LoPass', font=('',15), pad=(10,(12,0))),
-         sg.Slider(range=(1, 100), orientation='h',size=(20, 20), default_value=50, key='bright_loPass',enable_events=True)],
+         sg.Slider(range=(1, 255), orientation='h',size=(20, 20), default_value=50, key='bright_loPass',enable_events=True)],
         [sg.Text('Rotate', font=('',15), pad=(10,(12,0))),
          sg.Slider(range=(0, 3),orientation='h',size=(20, 20), default_value=0, key='rotate', enable_events=True)],
         [sg.Text('Scale', font=('',15), pad=(10,(12,0))),
