@@ -20,7 +20,7 @@ Demo/installation video (credits to my 13 yr old for doing this).
 python -m venv .
 .\Scripts\activate.bat
 pip install -r requirements.txt
-python -m float_cam.py
+python float_cam.py
 ```
 > On MacOS, the installation with Anaconda depends on whether the OS has been upgraded to Catalina
 > https://docs.anaconda.com/anaconda/install/mac-os/
