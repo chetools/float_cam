@@ -34,7 +34,7 @@ def make_layout(valid_ids):
         [sg.Text('Rotate', font=('',15), pad=(10,(12,0))),
          sg.Slider(range=(0, 3),orientation='h',size=(20, 20), default_value=0, key='rotate', enable_events=True)],
         [sg.Text('Scale', font=('',15), pad=(10,(12,0))),
-         sg.Slider(range=(1, 12),orientation='h',size=(20, 20), default_value=2, resolution = 0.25, key='scale', enable_events=True)],
+         sg.Slider(range=(1, 24),orientation='h',size=(20, 20), default_value=2, resolution = 0.25, key='scale', enable_events=True)],
     ]
 
     chroma_camera_layout = [[sg.Column(chroma_layout, element_justification='right', pad=(20,15))],
