@@ -82,37 +82,18 @@ class Dim(Structure):
                 ('bright_loPass', c_int)]
 
 def config(dim, window2, terminate):
-
     while True:
         event, values = window2.Read(timeout=100)
         if event != sg.TIMEOUT_KEY:
             print(event, values)
             dim.acquire()
             dim.change=True
-            if event=='L':
-                dim.L = int(values['L'])
-            elif event=='W':
-                dim.W = int(values['W'])
-            elif event=='ID':
-                dim.ID = int(values['ID'])
-            elif event=='T':
-                dim.T = int(values['T'])
-            elif event=='H':
-                dim.H = 100-int(values['H'])
-            elif event=='rotate':
-                dim.rotate = int(values['rotate'])
+            if event=='scale':
+                dim.scale=values['scale']
             elif event=='hflip':
                 dim.hflip = bool(values['hflip'])
-            elif event=='scale':
-                dim.scale=values['scale']
-            elif event=='hue_loPass':
-                dim.hue_loPass=int(values['hue_loPass'])
-            elif event=='hue_hiPass':
-                dim.hue_hiPass=int(values['hue_hiPass'])
-            elif event=='sat_loPass':
-                dim.sat_loPass=int(values['sat_loPass'])
-            elif event=='bright_loPass':
-                dim.bright_loPass=int(values['bright_loPass'])
+            else:
+                setattr(dim,event,int(values[event]))
             dim.release()
         if event is None or event == sg.WIN_CLOSED or event == 'Exit':
             terminate.value=True
@@ -153,12 +134,10 @@ if __name__ == '__main__':
     terminate = ctx.Value(c_bool, False)
     dim = mp.Value(Dim)
     valid_ids=find_cam()
-    # valid_ids=[1,2,3]
-    # print(f'valid: {valid_ids}')
     dim_init(dim)
 
 
-    window2 = sg.Window('FloatCam Controls', make_layout(valid_ids))
+    window2 = sg.Window('FloatCam Controls', make_layout(valid_ids, dim))
 
     config_proc = ctx.Process(target=config, args=(dim, window2, terminate), daemon=True)
     config_proc.start()
