@@ -18,6 +18,7 @@ def find_cam():
                 valid_id.append(i)
         except:
             pass
+    print('valid', valid_id)
     return(valid_id)
 
 
@@ -28,10 +29,11 @@ def update_frame(frame, new_frame, dim, valid_ids):
     scale=2
     w = cam.get(3)
     h = cam.get(4)
+    H = 100-dim.H
     l = int(w*dim.L/100)
     r = int(l + (w-l)*dim.W/100)
     t = int(h*dim.T/100)
-    b = int(t + (h-t)*dim.H/100)
+    b = int(t + (h-t)*H/100)
 
     while True:
         try:
@@ -48,7 +50,7 @@ def update_frame(frame, new_frame, dim, valid_ids):
                 l = int(w*dim.L/100)
                 r = int(l + (w-l)*dim.W/100)
                 t = int(h*dim.T/100)
-                b = int(t + (h-t)*dim.H/100)
+                b = int(t + (h-t)*H/100)
                 scale=dim.scale
                 dim.change=False
             hsv = cv2.cvtColor(np.fliplr(img)[t:b, l:r,:],cv2.COLOR_BGR2HSV)
@@ -89,30 +91,13 @@ def config(dim, window2, terminate):
             print(event, values)
             dim.acquire()
             dim.change=True
-            if event=='L':
-                dim.L = int(values['L'])
-            elif event=='W':
-                dim.W = int(values['W'])
-            elif event=='ID':
-                dim.ID = int(values['ID'])
-            elif event=='T':
-                dim.T = int(values['T'])
-            elif event=='H':
-                dim.H = 100-int(values['H'])
-            elif event=='rotate':
-                dim.rotate = int(values['rotate'])
-            elif event=='hflip':
+
+            if event=='hflip':
                 dim.hflip = bool(values['hflip'])
             elif event=='scale':
                 dim.scale=values['scale']
-            elif event=='hue_loPass':
-                dim.hue_loPass=int(values['hue_loPass'])
-            elif event=='hue_hiPass':
-                dim.hue_hiPass=int(values['hue_hiPass'])
-            elif event=='sat_loPass':
-                dim.sat_loPass=int(values['sat_loPass'])
-            elif event=='bright_loPass':
-                dim.bright_loPass=int(values['bright_loPass'])
+            else:
+                setattr(dim,event,int(values[event]))
             dim.release()
         if event is None or event == sg.WIN_CLOSED or event == 'Exit':
             terminate.value=True
