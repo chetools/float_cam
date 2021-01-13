@@ -21,19 +21,31 @@ def find_cam():
             pass
     return(valid_id)
 
+def lrtb(dim, cam):
+    w = cam.get(3)
+    h = cam.get(4)
+    if dim.rotate==0:
+        L, T, W, H = dim.L, dim.T, dim.W, dim.H
+    elif dim.rotate==1:
+        L, T, W, H = dim.L, dim.T, dim.W, dim.H
+    elif dim.rotate==2:
+        L, T, W, H = dim.L, dim.T, dim.W, dim.H
+    elif dim.rotate==3:
+        L, T, W, H = dim.L, dim.T, dim.W, dim.H
+
+    l = int(w*L/100)
+    r = int(l + (w-l)*W/100)
+    t = int(h*T/100)
+    b = int(t + (h-t)*H/100)
+    scale = dim.scale
+    mask = np.zeros((int((b-t)/scale), int((r-l)/scale)))
+    return l,r,t,b, scale, mask
 
 def update_frame(frame, new_frame, dim, valid_ids):
     print(f'update frame valid: {valid_ids}')
     old_ID = dim.ID
     cam = cv2.VideoCapture(valid_ids[dim.ID])
-    scale = 2
-    w = cam.get(3)
-    h = cam.get(4)
-    l = int(w*dim.L/100)
-    r = int(l + (w-l)*dim.W/100)
-    t = int(h*dim.T/100)
-    b = int(t + (h-t)*dim.H/100)
-    mask = np.zeros((int((b-t)/scale), int((r-l)/scale)))
+    l,r,t,b, scale, mask = lrtb(dim, cam)
     transparent = np.array([0, 255, 0], dtype=c_uint8)
 
     while True:
@@ -46,14 +58,7 @@ def update_frame(frame, new_frame, dim, valid_ids):
                     old_ID = dim.ID
                 if not cam:
                     raise EnvironmentError
-                w = cam.get(3)
-                h = cam.get(4)
-                l = int(w*dim.L/100)
-                r = int(l + (w-l)*dim.W/100)
-                t = int(h*dim.T/100)
-                b = int(t + (h-t)*dim.H/100)
-                scale = dim.scale
-                mask = np.zeros((int((b-t)/scale), int((r-l)/scale)))
+                l,r,t,b, scale, mask = lrtb(dim, cam)
                 dim.change = False
             img = cv2.resize(img[t:b, l:r, :],
                              dsize=(int((r-l)/scale),
@@ -79,7 +84,7 @@ def update_frame(frame, new_frame, dim, valid_ids):
                 img, dim.rotate))[1][:, 0]
             dim.release()
             frame_array[:data.shape[0]] = data
-            new_frame.value = True
+            new_frame.set()
         except:
             dim.change = False
             dim.release()
@@ -128,7 +133,7 @@ def config(dim, window2, terminate):
                 dim.bright_loPass = int(values['bright_loPass'])
             dim.release()
         if event is None or event == sg.WIN_CLOSED or event == 'Exit':
-            terminate.value = True
+            terminate.set()
             break
 
 
@@ -160,8 +165,8 @@ if __name__ == '__main__':
 
     ctx = mp.get_context('spawn')
     frame = mp.RawArray(c_uint8, BUFFER_SIZE)
-    new_frame = ctx.Value(c_bool, False)
-    terminate = ctx.Value(c_bool, False)
+    new_frame = ctx.Event()
+    terminate = ctx.Event()
     dim = mp.Value(Dim)
     valid_ids = find_cam()
     dim_init(dim)
@@ -178,10 +183,10 @@ if __name__ == '__main__':
 
     while True:
         event, values = window.Read(timeout=10)
-        if event is None or event == sg.WIN_CLOSED or event == 'Exit' or terminate.value:
+        if event is None or event == sg.WIN_CLOSED or event == 'Exit' or terminate.is_set():
             break
 
-        if new_frame.value:
+        if new_frame.is_set():
             frame_array = np.frombuffer(frame, dtype=c_uint8)
             window.FindElement('image').Update(data=frame_array.tobytes())
-            new_frame.value = False
+            new_frame.clear()
