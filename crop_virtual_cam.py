@@ -31,7 +31,7 @@ def find_cam():
 def send_vc_frame(vc_frame_buffer, vc_frame_ready):
     vc_frame = np.frombuffer(vc_frame_buffer, dtype=c_uint8).reshape((VC_H, VC_W, 4))
     vc_copy = np.copy(vc_frame)
-    with pyvirtualcam.Camera(width=VC_W, height=VC_H, fps=24) as vc:
+    with pyvirtualcam.Camera(width=VC_W, height=VC_H, fps=30) as vc:
         while True:
             if vc_frame_ready.is_set():
                 vc.send(vc_frame)
@@ -39,7 +39,8 @@ def send_vc_frame(vc_frame_buffer, vc_frame_ready):
                 vc_frame_ready.clear()
             else:
                 vc.send(vc_copy)
-            vc.sleep_until_next_frame()
+            # vc.sleep_until_next_frame()
+            
 def lrtbhw(dim, cam):
     w = int(cam.get(3))
     h = int(cam.get(4))
@@ -85,11 +86,10 @@ def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame_ready, dim,
                             fx=1/scale,fy=1/scale,
                             interpolation=cv2.INTER_CUBIC)
 
-
-            data = cv2.imencode('.png', np.fliplr(img) )[1][:, 0]
             dim.release()
-            frame[:data.shape[0]] = data
-            new_frame.set()
+            # data = cv2.imencode('.png', img )[1][:, 0]
+            # frame[:data.shape[0]] = data
+            # new_frame.set()
 
             if not vc_frame_ready.is_set():
                 vc_frame.fill(0)     
