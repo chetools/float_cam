@@ -13,7 +13,7 @@ CAP_H = 1080
 CAP_BUFFER_SIZE = CAP_W*CAP_H*3
 VC_W = 1280
 VC_H = 720
-VC_BUFFER_SIZE = VC_W*VC_H*4
+VC_BUFFER_SIZE = VC_W*VC_H*4*2
 
 
 def find_cam():
@@ -28,18 +28,14 @@ def find_cam():
             pass
     return(valid_id)
 
-def send_vc_frame(vc_frame_buffer, vc_frame_ready):
-    vc_frame = np.frombuffer(vc_frame_buffer, dtype=c_uint8).reshape((VC_H, VC_W, 4))
-    vc_copy = np.copy(vc_frame)
+def send_vc_frame(vc_frame_buffer, vc_frame0):
+    vc_frame = np.frombuffer(vc_frame_buffer, dtype=c_uint8).reshape((2, VC_H, VC_W, 4))
     with pyvirtualcam.Camera(width=VC_W, height=VC_H, fps=30) as vc:
         while True:
-            if vc_frame_ready.is_set():
-                vc.send(vc_frame)
-                vc_copy[:,:] = vc_frame
-                vc_frame_ready.clear()
+            if vc_frame0.is_set():
+                vc.send(vc_frame[0])
             else:
-                vc.send(vc_copy)
-            # vc.sleep_until_next_frame()
+                vc.send(vc_frame[1])
             
 def lrtbhw(dim, cam):
     w = int(cam.get(3))
@@ -53,16 +49,16 @@ def lrtbhw(dim, cam):
     scale = dim.scale
     return l,r,t,b, scale
 
-def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame_ready, dim, valid_ids):
+def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, valid_ids):
     print(f'update frame valid: {valid_ids}')
     old_ID = dim.ID
-    cam = cv2.VideoCapture(valid_ids[dim.ID], cv2.CAP_DSHOW)
+    cam = cv2.VideoCapture(valid_ids[dim.ID])
     cam.set(cv2.CAP_PROP_FRAME_WIDTH, CAP_H)
     cam.set(cv2.CAP_PROP_FRAME_HEIGHT, CAP_W)
     l,r,t,b,scale=lrtbhw(dim,cam)
     transparent = np.array([0, 255, 0], dtype=c_uint8)
     frame = np.frombuffer(frame_buffer, dtype=c_uint8)
-    vc_frame = np.frombuffer(vc_frame_buffer, dtype=c_uint8).reshape((VC_H, VC_W, 4))
+    vc_frame = np.frombuffer(vc_frame_buffer, dtype=c_uint8).reshape((2, VC_H, VC_W, 4))
 
     while True:
         try:
@@ -70,7 +66,7 @@ def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame_ready, dim,
             dim.acquire()
             if dim.change:
                 if dim.ID != old_ID:
-                    cam = cv2.VideoCapture(valid_ids[dim.ID], cv2.CAP_DSHOW)
+                    cam = cv2.VideoCapture(valid_ids[dim.ID])
                     cam.set(cv2.CAP_PROP_FRAME_WIDTH, CAP_W)
                     cam.set(cv2.CAP_PROP_FRAME_HEIGHT, CAP_H)
                     old_ID = dim.ID
@@ -85,33 +81,50 @@ def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame_ready, dim,
             img = cv2.resize(img[t:(h-b), l:(w-r), :], None,
                             fx=1/scale,fy=1/scale,
                             interpolation=cv2.INTER_CUBIC)
+            hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+            mask.fill(0)
+            np.logical_or(
+                np.less(hsv[:, :, 0], dim.hue_loPass), mask, out=mask)
+            np.logical_or(np.greater(
+                hsv[:, :, 0], dim.hue_hiPass), mask, out=mask)
+            np.logical_or(
+                np.less(hsv[:, :, 1], dim.sat_loPass), mask, out=mask)
+            np.logical_or(
+                np.less(hsv[:, :, 2], dim.bright_loPass), mask, out=mask)
 
+            frame_array = np.frombuffer(frame, dtype=c_uint8)
+
+            img = np.where(mask[:, :, None], img, transparent[None, None, :])
             dim.release()
-            # data = cv2.imencode('.png', img )[1][:, 0]
-            # frame[:data.shape[0]] = data
-            # new_frame.set()
+            data = cv2.imencode('.png', img )[1][:, 0]
+            frame[:data.shape[0]] = data
+            new_frame.set()
 
-            if not vc_frame_ready.is_set():
-                vc_frame.fill(0)     
-                img_h, img_w,_ = img.shape
+            img_h, img_w,_ = img.shape
+            idx=0
+            if vc_frame0.is_set():
+                idx=1
           
-                if img_h > VC_H and img_w > VC_W:
-                    vc_frame[:, :, :3] = cv2.cvtColor(img[(img_h//2 - VC_H//2):(img_h//2 + (VC_H - VC_H//2)), 
-                        (img_w//2 - VC_W//2):(img_w//2 + (VC_W - VC_W//2))], cv2.COLOR_BGR2RGB)
+            if img_h > VC_H and img_w > VC_W:
+                vc_frame[idx,:, :, :3] = cv2.cvtColor(img[(img_h//2 - VC_H//2):(img_h//2 + (VC_H - VC_H//2)), 
+                    (img_w//2 - VC_W//2):(img_w//2 + (VC_W - VC_W//2))], cv2.COLOR_BGR2RGB)
 
-                elif img_h > VC_H and img_w <= VC_W:
-                    vc_frame[:,(VC_W//2-img_w//2):(VC_W//2+(img_w - img_w//2)), :3] = cv2.cvtColor(
-                        img[(img_h//2 - VC_H//2):(img_h//2 + (VC_H - VC_H//2)), :], cv2.COLOR_BGR2RGB)
+            elif img_h > VC_H and img_w <= VC_W:
+                vc_frame[idx,:,(VC_W//2-img_w//2):(VC_W//2+(img_w - img_w//2)), :3] = cv2.cvtColor(
+                    img[(img_h//2 - VC_H//2):(img_h//2 + (VC_H - VC_H//2)), :], cv2.COLOR_BGR2RGB)
 
-                elif img_h <= VC_H and img_w > VC_W:
-                    vc_frame[(VC_H//2 - img_h//2):(VC_H//2+(img_h-img_h//2)), :, :3] = cv2.cvtColor(
-                        img[:, (img_w//2 - VC_W//2):(img_w//2 + (VC_W - VC_W//2))], cv2.COLOR_BGR2RGB)
+            elif img_h <= VC_H and img_w > VC_W:
+                vc_frame[idx,(VC_H//2 - img_h//2):(VC_H//2+(img_h-img_h//2)), :, :3] = cv2.cvtColor(
+                    img[:, (img_w//2 - VC_W//2):(img_w//2 + (VC_W - VC_W//2))], cv2.COLOR_BGR2RGB)
 
-                elif img_h <= VC_H and img_w <= VC_W:
-                    vc_frame[(VC_H//2 - img_h//2):(VC_H//2+(img_h-img_h//2)),(VC_W//2-img_w//2):(VC_W//2+(img_w - img_w//2)), :3] = cv2.cvtColor(
-                        img, cv2.COLOR_BGR2RGB)
+            elif img_h <= VC_H and img_w <= VC_W:
+                vc_frame[idx,(VC_H//2 - img_h//2):(VC_H//2+(img_h-img_h//2)),(VC_W//2-img_w//2):(VC_W//2+(img_w - img_w//2)), :3] = cv2.cvtColor(
+                    img, cv2.COLOR_BGR2RGB)
 
-                vc_frame_ready.set()
+            if vc_frame0.is_set():
+                vc_frame0.clear()
+            else:
+                vc_frame0.set()
 
         except:
             dim.change = False
@@ -138,7 +151,7 @@ if __name__ == '__main__':
     new_frame = ctx.Event()
 
     vc_frame_buffer = mp.RawArray(c_uint8, VC_BUFFER_SIZE)
-    vc_frame_ready = ctx.Event()
+    vc_frame0 = ctx.Event()
 
     terminate = ctx.Event()
     dim = mp.Value(Dim)
@@ -152,11 +165,11 @@ if __name__ == '__main__':
     config_proc.start()
 
     update_frame_proc = ctx.Process(target=update_frames, args=(
-        frame_buffer, new_frame, vc_frame_buffer, vc_frame_ready, dim, valid_ids), daemon=True)
+        frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, valid_ids), daemon=True)
     update_frame_proc.start()
 
     send_vc_frame_proc = (ctx.Process(target=send_vc_frame, args=(
-        vc_frame_buffer, vc_frame_ready), daemon=True))
+        vc_frame_buffer, vc_frame0), daemon=True))
     send_vc_frame_proc.start()
 
     def keyboard_interrupt_handler(signal, frame):
