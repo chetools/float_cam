@@ -42,12 +42,17 @@ def lrtbhw(dim, cam):
     h = int(cam.get(4))
     L, T, R, B = dim.L, dim.T, dim.R, dim.B
 
-    r = int(w*L/100)
-    l = int(w*R/100)
+    l = int(w*L/100)
+    r = int(w*R/100)
     t = int(h*T/100)
     b = int(h*B/100)
     scale = dim.scale
-    return l,r,t,b, scale
+    if dim.rotate==1 or dim.rotate==3:
+        h,w=w,h
+    mask=np.zeros((int((h-b-t)/scale), int((w-r-l)/scale)), dtype=c_bool)
+    img2=np.zeros((int((h-b-t)/scale), int((w-r-l)/scale),3), dtype=c_uint8)
+    hsv=np.zeros_like(img2)
+    return l,r,t,b, h,w, scale, mask, img2, hsv
 
 def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, valid_ids):
     print(f'update frame valid: {valid_ids}')
@@ -55,7 +60,7 @@ def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, vali
     cam = cv2.VideoCapture(valid_ids[dim.ID])
     cam.set(cv2.CAP_PROP_FRAME_WIDTH, CAP_H)
     cam.set(cv2.CAP_PROP_FRAME_HEIGHT, CAP_W)
-    l,r,t,b,scale=lrtbhw(dim,cam)
+    l,r,t,b,h,w,scale,mask, img2, hsv=lrtbhw(dim,cam)
     transparent = np.array([0, 255, 0], dtype=c_uint8)
     frame = np.frombuffer(frame_buffer, dtype=c_uint8)
     vc_frame = np.frombuffer(vc_frame_buffer, dtype=c_uint8).reshape((2, VC_H, VC_W, 4))
@@ -69,19 +74,20 @@ def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, vali
                     cam = cv2.VideoCapture(valid_ids[dim.ID])
                     cam.set(cv2.CAP_PROP_FRAME_WIDTH, CAP_W)
                     cam.set(cv2.CAP_PROP_FRAME_HEIGHT, CAP_H)
+                    ret, img = cam.read()
                     old_ID = dim.ID
                 if not cam:
                     raise EnvironmentError
-                l,r,t,b,scale=lrtbhw(dim,cam)
+                l,r,t,b,h,w,scale,mask, img2, hsv=lrtbhw(dim,cam)
+
+                vc_frame.fill(0)
                 dim.change = False
             img = np.rot90(img, dim.rotate)            
             if dim.hflip:
                 img = np.fliplr(img)
-            h,w,_ = img.shape
-            img = cv2.resize(img[t:(h-b), l:(w-r), :], None,
-                            fx=1/scale,fy=1/scale,
+            cv2.resize(img[t:(h-b), l:(w-r), :], dsize=(img2.shape[1],img2.shape[0]), dst=img2,
                             interpolation=cv2.INTER_CUBIC)
-            hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+            cv2.cvtColor(img2, cv2.COLOR_BGR2HSV,dst=hsv)
             mask.fill(0)
             np.logical_or(
                 np.less(hsv[:, :, 0], dim.hue_loPass), mask, out=mask)
@@ -94,9 +100,9 @@ def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, vali
 
             frame_array = np.frombuffer(frame, dtype=c_uint8)
 
-            img = np.where(mask[:, :, None], img, transparent[None, None, :])
+            img = np.where(mask[:, :, None], img2, transparent[None, None, :])
             dim.release()
-            data = cv2.imencode('.png', img )[1][:, 0]
+            data = cv2.imencode('.png',img)[1][:, 0]
             frame[:data.shape[0]] = data
             new_frame.set()
 
