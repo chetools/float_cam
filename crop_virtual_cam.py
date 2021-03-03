@@ -5,7 +5,7 @@ import cv2
 import PySimpleGUI as sg
 import numpy as np
 from ctypes import c_bool, c_uint8, c_int, Structure, c_float
-from layout import make_layout, config, dim_init, Dim
+from layout import make_layout, config, dim_init, Dim, handle_key
 import pyvirtualcam
 import signal
 CAP_W = 1920
@@ -149,12 +149,19 @@ if __name__ == '__main__':
 
     if platform == 'win32':
         window = sg.Window('FloatCam', [[sg.Image(filename='', key='image', background_color='#00FF00')], ],
-                           transparent_color='#00FF00', no_titlebar=True, grab_anywhere=True, return_keyboard_events=True,
-                           keep_on_top=True, force_toplevel=True, element_padding=(0, 0), margins=(0, 0))
+                           transparent_color='#00FF00', no_titlebar=True, grab_anywhere=True,
+                           keep_on_top=True, force_toplevel=True, element_padding=(0, 0), margins=(0, 0), finalize=True)
     else:
         window = sg.Window('FloatCam', [[sg.Image(filename='', key='image', background_color='black')], ],
-                           no_titlebar=True, grab_anywhere=True, return_keyboard_events=True,
-                           keep_on_top=True, force_toplevel=True, element_padding=(0, 0), margins=(0, 0))
+                           no_titlebar=True, grab_anywhere=True,
+                           keep_on_top=True, force_toplevel=True, element_padding=(0, 0), margins=(0, 0), finalize=True)
+
+    root = window.TKroot
+    root.bind('<KeyPress>', lambda event, key='Press': window.write_event_value(event,key))
+    root.bind('<MouseWheel>', lambda event, key='Wheel': window.write_event_value(event,key))
+    root.bind('<Button-3>', lambda event, key='B3': window.write_event_value(event,key))
+    root.bind('<B3-Motion>', lambda event, key='BM3': window.write_event_value(event,key))
+    root.bind('<ButtonRelease-3>', lambda event, key='BR3': window.write_event_value(event,key))
 
     ctx = mp.get_context('spawn')
     frame_buffer = mp.RawArray(c_uint8, CAP_BUFFER_SIZE)
@@ -196,7 +203,8 @@ if __name__ == '__main__':
         event, values = window.Read(timeout=10)
         if event is None or event == sg.WIN_CLOSED or event == 'Exit' or terminate.is_set():
             break
-
+        if event != sg.TIMEOUT_KEY:
+            handle_key(event, values, dim, window)
         if new_frame.is_set():
             frame_array = np.frombuffer(frame_buffer, dtype=c_uint8)
             window['image'].Update(data=frame_array.tobytes())

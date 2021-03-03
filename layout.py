@@ -57,6 +57,17 @@ class Dim(Structure):
                 ('bright_loPass', c_int)]
 
 
+def handle_key(event, value, dim,window):
+    print(event.__dict__)
+    print(window.current_location())
+    # window.move(window.current_location()[0]+5,window.current_location()[1])
+    dim.acquire()
+    dim.change=True
+    print(event.type=='ButtonPress')
+    # if event.keysym=='Right' and dim.R<256:
+        # dim.R+=1
+    dim.release()
+
 def config(dim, window2, terminate):
 
     while True:
