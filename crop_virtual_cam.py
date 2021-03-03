@@ -14,6 +14,7 @@ CAP_BUFFER_SIZE = CAP_W*CAP_H*3
 VC_W = 1280
 VC_H = 720
 VC_BUFFER_SIZE = VC_W*VC_H*4*2
+kernel = np.ones((12,12),np.uint8)
 
 
 def find_cam():
@@ -62,6 +63,7 @@ def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, vali
     cam.set(cv2.CAP_PROP_FRAME_HEIGHT, CAP_W)
     l,r,t,b,h,w,scale,mask, img2, hsv=lrtbhw(dim,cam)
     transparent = np.array([0, 255, 0], dtype=c_uint8)
+    black = np.array([0,0,0],dtype=c_uint8)
     frame = np.frombuffer(frame_buffer, dtype=c_uint8)
     vc_frame = np.frombuffer(vc_frame_buffer, dtype=c_uint8).reshape((2, VC_H, VC_W, 4))
 
@@ -98,9 +100,10 @@ def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, vali
             np.logical_or(
                 np.less(hsv[:, :, 2], dim.bright_loPass), mask, out=mask)
 
+            mask = cv2.morphologyEx(mask.astype(float), cv2.MORPH_OPEN, kernel).astype(bool)
             frame_array = np.frombuffer(frame, dtype=c_uint8)
 
-            img = np.where(mask[:, :, None], img2, transparent[None, None, :])
+            img = np.where(mask[:, :,None], img2, transparent[None, None, :])
             dim.release()
             data = cv2.imencode('.png',img)[1][:, 0]
             frame[:data.shape[0]] = data
@@ -108,6 +111,7 @@ def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, vali
 
             img_h, img_w,_ = img.shape
             idx=0
+            img = np.where(mask[:, :,None], img2, black[None, None, :])
             if vc_frame0.is_set():
                 idx=1
           
