@@ -14,7 +14,7 @@ CAP_BUFFER_SIZE = CAP_W*CAP_H*3
 VC_W = 1280
 VC_H = 720
 VC_BUFFER_SIZE = VC_W*VC_H*4*2
-kernel = np.ones((12,12),np.uint8)
+kernel = np.ones((3,3),np.uint8)
 
 
 def find_cam():
@@ -47,13 +47,21 @@ def lrtbhw(dim, cam):
     r = int(w*R/100)
     t = int(h*T/100)
     b = int(h*B/100)
-    scale = dim.scale
+    fscale = dim.fscale
+    wscale = dim.wscale
+    scale=min(fscale,wscale)
     if dim.rotate==1 or dim.rotate==3:
         h,w=w,h
-    mask=np.zeros((int((h-b-t)/scale), int((w-r-l)/scale)), dtype=c_bool)
-    img2=np.zeros((int((h-b-t)/scale), int((w-r-l)/scale),3), dtype=c_uint8)
-    hsv=np.zeros_like(img2)
-    return l,r,t,b, h,w, scale, mask, img2, hsv
+
+    scale=min(fscale,wscale)
+    maskL_bool=np.zeros((int((h-b-t)/scale), int((w-r-l)/scale)), dtype=c_bool)
+    maskL_float = np.zeros((int((h-b-t)/scale), int((w-r-l)/scale)), dtype=c_float)
+    imgL=np.zeros((int((h-b-t)/scale), int((w-r-l)/scale),3), dtype=c_uint8)
+    scale=max(fscale,wscale)
+    imgS=np.zeros((int((h-b-t)/scale), int((w-r-l)/scale),3), dtype=c_uint8)
+    maskS_float = np.zeros((int((h-b-t)/scale), int((w-r-l)/scale)), dtype=c_float)
+    hsv=np.zeros_like(imgL)
+    return l,r,t,b, h,w, fscale, wscale, maskL_bool, maskL_float, maskS_float, imgL, imgS, hsv
 
 def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, valid_ids):
     print(f'update frame valid: {valid_ids}')
@@ -61,7 +69,7 @@ def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, vali
     cam = cv2.VideoCapture(valid_ids[dim.ID])
     cam.set(cv2.CAP_PROP_FRAME_WIDTH, CAP_H)
     cam.set(cv2.CAP_PROP_FRAME_HEIGHT, CAP_W)
-    l,r,t,b,h,w,scale,mask, img2, hsv=lrtbhw(dim,cam)
+    l,r,t,b,h,w,fscale,wscale, maskL_bool, maskL_float, maskS_float, imgL, imgS, hsv=lrtbhw(dim,cam)
     transparent = np.array([0, 255, 0], dtype=c_uint8)
     black = np.array([0,0,0],dtype=c_uint8)
     frame = np.frombuffer(frame_buffer, dtype=c_uint8)
@@ -80,38 +88,49 @@ def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, vali
                     old_ID = dim.ID
                 if not cam:
                     raise EnvironmentError
-                l,r,t,b,h,w,scale,mask, img2, hsv=lrtbhw(dim,cam)
+                l,r,t,b,h,w,fscale,wscale, maskL_bool, maskL_float, maskS_float, imgL, imgS, hsv=lrtbhw(dim,cam)
 
                 vc_frame.fill(0)
                 dim.change = False
             img = np.rot90(img, dim.rotate)            
             if dim.hflip:
                 img = np.fliplr(img)
-            cv2.resize(img[t:(h-b), l:(w-r), :], dsize=(img2.shape[1],img2.shape[0]), dst=img2,
-                            interpolation=cv2.INTER_CUBIC)
-            cv2.cvtColor(img2, cv2.COLOR_BGR2HSV,dst=hsv)
-            mask.fill(0)
+            cv2.resize(img[t:(h-b), l:(w-r), :], dsize=(imgL.shape[1],imgL.shape[0]), dst=imgL,
+                            interpolation=cv2.INTER_LINEAR)
+            cv2.resize(img[t:(h-b), l:(w-r), :], dsize=(imgS.shape[1],imgS.shape[0]), dst=imgS,
+                            interpolation=cv2.INTER_LINEAR)
+            cv2.cvtColor(imgL, cv2.COLOR_BGR2HSV,dst=hsv)
+            maskL_bool.fill(False)
             np.logical_or(
-                np.less(hsv[:, :, 0], dim.hue_loPass), mask, out=mask)
+                np.less(hsv[:, :, 0], dim.hue_loPass), maskL_bool, out=maskL_bool)
             np.logical_or(np.greater(
-                hsv[:, :, 0], dim.hue_hiPass), mask, out=mask)
+                hsv[:, :, 0], dim.hue_hiPass), maskL_bool, out=maskL_bool)
             np.logical_or(
-                np.less(hsv[:, :, 1], dim.sat_loPass), mask, out=mask)
+                np.less(hsv[:, :, 1], dim.sat_loPass), maskL_bool, out=maskL_bool)
             np.logical_or(
-                np.less(hsv[:, :, 2], dim.bright_loPass), mask, out=mask)
+                np.less(hsv[:, :, 2], dim.bright_loPass), maskL_bool, out=maskL_bool)
+            cv2.erode(maskL_bool.astype(c_float), iterations=5, kernel=kernel, dst=maskL_float)
+            cv2.dilate(maskL_float, iterations=5, kernel=kernel, dst=maskL_float)
+            cv2.resize(maskL_float, dsize=(imgS.shape[1],imgS.shape[0]), dst=maskS_float,
+                            interpolation=cv2.INTER_LINEAR)
 
-            mask = cv2.morphologyEx(mask.astype(float), cv2.MORPH_OPEN, kernel).astype(bool)
-            frame_array = np.frombuffer(frame, dtype=c_uint8)
 
-            img = np.where(mask[:, :,None], img2, transparent[None, None, :])
+            if dim.fscale<=dim.wscale:
+                img = np.where(maskL_float.astype(bool)[:, :,None], imgL, transparent[None, None, :])
+            else:
+                img = np.where(maskS_float.astype(bool)[:, :,None], imgS, transparent[None, None, :])
             dim.release()
             data = cv2.imencode('.png',img)[1][:, 0]
-            frame[:data.shape[0]] = data
+            frame_array = np.frombuffer(frame, dtype=c_uint8)
+            frame_array[:data.shape[0]] = data
             new_frame.set()
 
-            img_h, img_w,_ = img.shape
             idx=0
-            img = np.where(mask[:, :,None], img2, black[None, None, :])
+            if dim.wscale<=dim.fscale:
+                img = np.where(maskL_float.astype(bool)[:, :,None], imgL, black[None, None, :])
+            else:
+                img = np.where(maskS_float.astype(bool)[:, :,None], imgS, black[None, None, :])
+            img_h, img_w,_ = img.shape
             if vc_frame0.is_set():
                 idx=1
           
