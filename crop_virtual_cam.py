@@ -8,6 +8,8 @@ from ctypes import c_bool, c_uint8, c_int, Structure, c_float
 from layout import make_layout, config, dim_init, Dim, handle_key
 import pyvirtualcam
 import signal
+from scipy.interpolate import splprep, splev
+
 CAP_W = 1920
 CAP_H = 1080
 CAP_BUFFER_SIZE = CAP_W*CAP_H*3
@@ -15,6 +17,7 @@ VC_W = 1280
 VC_H = 720
 VC_BUFFER_SIZE = VC_W*VC_H*4*2
 kernel = np.ones((3,3),np.uint8)
+mask_e = 0.7
 
 
 def find_cam():
@@ -56,12 +59,13 @@ def lrtbhw(dim, cam):
     scale=min(fscale,wscale)
     maskL=np.zeros((int((h-b-t)/scale), int((w-r-l)/scale)), dtype=c_uint8)
     maskL_float = np.zeros((int((h-b-t)/scale), int((w-r-l)/scale)), dtype=c_float)
+    maskL_smooth = np.zeros_like(maskL_float)
     imgL=np.zeros((int((h-b-t)/scale), int((w-r-l)/scale),3), dtype=c_uint8)
     scale=max(fscale,wscale)
     imgS=np.zeros((int((h-b-t)/scale), int((w-r-l)/scale),3), dtype=c_uint8)
     maskS_float = np.zeros(imgS.shape[:2], dtype=c_float)
     hsv=np.zeros_like(imgL)
-    return l,r,t,b, h,w, fscale, wscale, maskL, maskL_float, maskS_float, imgL, imgS, hsv
+    return l,r,t,b, h,w, fscale, wscale, maskL, maskL_float, maskL_smooth, maskS_float, imgL, imgS, hsv
 
 def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, valid_ids):
     print(f'update frame valid: {valid_ids}')
@@ -69,7 +73,7 @@ def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, vali
     cam = cv2.VideoCapture(valid_ids[dim.ID])
     cam.set(cv2.CAP_PROP_FRAME_WIDTH, CAP_H)
     cam.set(cv2.CAP_PROP_FRAME_HEIGHT, CAP_W)
-    l,r,t,b,h,w,fscale,wscale, maskL, maskL_float, maskS_float, imgL, imgS, hsv=lrtbhw(dim,cam)
+    l,r,t,b,h,w,fscale,wscale, maskL, maskL_float, maskL_smooth, maskS_float, imgL, imgS, hsv=lrtbhw(dim,cam)
     transparent = np.array([0, 255, 0], dtype=c_uint8)
     black = np.array([0,0,0],dtype=c_uint8)
     frame = np.frombuffer(frame_buffer, dtype=c_uint8)
@@ -88,7 +92,7 @@ def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, vali
                     old_ID = dim.ID
                 if not cam:
                     raise EnvironmentError
-                l,r,t,b,h,w,fscale,wscale, maskL, maskL_float, maskS_float, imgL, imgS, hsv=lrtbhw(dim,cam)
+                l,r,t,b,h,w,fscale,wscale, maskL, maskL_float, maskL_smooth, maskS_float, imgL, imgS, hsv=lrtbhw(dim,cam)
 
                 vc_frame.fill(0)
                 dim.change = False
@@ -96,9 +100,9 @@ def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, vali
             if dim.hflip:
                 img = np.fliplr(img)
             cv2.resize(img[t:(h-b), l:(w-r), :], dsize=(imgL.shape[1],imgL.shape[0]), dst=imgL,
-                            interpolation=cv2.INTER_LINEAR)
+                            interpolation=cv2.INTER_CUBIC)
             cv2.resize(img[t:(h-b), l:(w-r), :], dsize=(imgS.shape[1],imgS.shape[0]), dst=imgS,
-                            interpolation=cv2.INTER_LINEAR)
+                            interpolation=cv2.INTER_CUBIC)
             cv2.cvtColor(imgL, cv2.COLOR_BGR2HSV,dst=hsv)
             maskL.fill(0)
             np.logical_or(
@@ -110,22 +114,22 @@ def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, vali
             np.logical_or(
                 np.less(hsv[:, :, 2], dim.bright_loPass), maskL, out=maskL)
             cv2.erode(maskL.astype(c_float), iterations=5, kernel=kernel, dst=maskL_float)
-            cv2.dilate(maskL_float, iterations=3, kernel=kernel, dst=maskL_float)
+            cv2.dilate(maskL_float, iterations=5, kernel=kernel, dst=maskL_float)
 
-
+            maskL.fill(0)
             contours, _ = cv2.findContours(maskL_float.astype(c_uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             i=np.argmax(np.array([cv2.contourArea(contour) for contour in contours]))
-            maskL.fill(0)
-            cv2.drawContours(maskL, contours, i, (255,255,255), -1, cv2.LINE_8)
 
-            print
-            cv2.resize(maskL.astype(c_float), dsize=(imgS.shape[1],imgS.shape[0]), dst=maskS_float,
-                            interpolation=cv2.INTER_LINEAR)
+            cv2.drawContours(maskL, contours, i, (1,1,1), -1, cv2.LINE_8)
+            maskL_smooth = mask_e*maskL_smooth + (1-mask_e)*maskL
+            cv2.erode(maskL_smooth, iterations=1, kernel=kernel, dst=maskL_smooth)
+            cv2.resize((maskL_smooth>0.5).astype(c_float), dsize=(imgS.shape[1],imgS.shape[0]), dst=maskS_float,
+                            interpolation=cv2.INTER_CUBIC)
 
             if dim.fscale<=dim.wscale:
-                img = np.where(maskL[:, :,None], imgL, transparent[None, None, :])
+                img = np.where(maskL_smooth[:, :,None]>0.5, imgL, transparent[None, None, :])
             else:
-                img = np.where(maskS_float.astype(bool)[:, :,None], imgS, transparent[None, None, :])
+                img = np.where(maskS_float[:, :,None].astype(c_bool), imgS, transparent[None, None, :])
             dim.release()
             data = cv2.imencode('.png',img)[1][:, 0]
             frame_array = np.frombuffer(frame, dtype=c_uint8)
@@ -133,10 +137,13 @@ def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, vali
             new_frame.set()
 
             idx=0
+            cv2.erode(maskL, iterations=5, kernel=kernel, dst=maskL)
+            cv2.resize(maskL.astype(c_float), dsize=(imgS.shape[1],imgS.shape[0]), dst=maskS_float,
+                interpolation=cv2.INTER_CUBIC)
             if dim.wscale<=dim.fscale:
-                img = np.where(maskL_float.astype(bool)[:, :,None], imgL, black[None, None, :])
+                img = np.where(maskL[:, :,None].astype(c_bool), imgL, black[None, None, :])
             else:
-                img = np.where(maskS_float.astype(bool)[:, :,None], imgS, black[None, None, :])
+                img = np.where(maskS_float[:, :,None].astype(c_bool), imgS, black[None, None, :])
             img_h, img_w,_ = img.shape
             if vc_frame0.is_set():
                 idx=1
