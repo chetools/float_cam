@@ -63,9 +63,13 @@ def lrtbhw(dim, cam):
     imgL=np.zeros((int((h-b-t)/scale), int((w-r-l)/scale),3), dtype=c_uint8)
     scale=max(fscale,wscale)
     imgS=np.zeros((int((h-b-t)/scale), int((w-r-l)/scale),3), dtype=c_uint8)
+    y,x=np.indices((int((h-b-t)/wscale),int((w-r-l)/wscale)))
+    d = min((h-b-t)/wscale,(w-r-l)/wscale)
+    rad=d/2
+    circle_idx=np.sqrt((x-rad)**2 + (y-rad)**2)>0.95*rad
     maskS_float = np.zeros(imgS.shape[:2], dtype=c_float)
     hsv=np.zeros_like(imgL)
-    return l,r,t,b, h,w, fscale, wscale, maskL, maskL_float, maskL_smooth, maskS_float, imgL, imgS, hsv
+    return l,r,t,b, h,w, fscale, wscale, maskL, maskL_float, maskL_smooth, maskS_float, circle_idx, imgL, imgS, hsv
 
 def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, valid_ids):
     print(f'update frame valid: {valid_ids}')
@@ -73,12 +77,14 @@ def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, vali
     cam = cv2.VideoCapture(valid_ids[dim.ID])
     cam.set(cv2.CAP_PROP_FRAME_WIDTH, CAP_H)
     cam.set(cv2.CAP_PROP_FRAME_HEIGHT, CAP_W)
-    l,r,t,b,h,w,fscale,wscale, maskL, maskL_float, maskL_smooth, maskS_float, imgL, imgS, hsv=lrtbhw(dim,cam)
+    l,r,t,b,h,w,fscale,wscale, maskL, maskL_float, maskL_smooth, maskS_float, circle_idx,imgL, imgS, hsv=lrtbhw(dim,cam)
     transparent = np.array([0, 255, 0], dtype=c_uint8)
-    black = np.array([0,0,0],dtype=c_uint8)
+    background = cv2.imread('background.png')
+    cv2.cvtColor(background,cv2.COLOR_BGR2RGB,dst=background)
     frame = np.frombuffer(frame_buffer, dtype=c_uint8)
     vc_frame = np.frombuffer(vc_frame_buffer, dtype=c_uint8).reshape((2, VC_H, VC_W, 4))
-
+    vc_frame[0,:,:,:3]=background.copy()
+    vc_frame[1,:,:,:3]=background.copy()
     while True:
         try:
             ret, img = cam.read()
@@ -92,9 +98,9 @@ def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, vali
                     old_ID = dim.ID
                 if not cam:
                     raise EnvironmentError
-                l,r,t,b,h,w,fscale,wscale, maskL, maskL_float, maskL_smooth, maskS_float, imgL, imgS, hsv=lrtbhw(dim,cam)
-
-                vc_frame.fill(0)
+                vc_frame[0,:,:,:3]=background.copy()
+                vc_frame[1,:,:,:3]=background.copy()
+                l,r,t,b,h,w,fscale,wscale, maskL, maskL_float, maskL_smooth, maskS_float, circle_idx, imgL, imgS, hsv=lrtbhw(dim,cam)
                 dim.change = False
             img = np.rot90(img, dim.rotate)            
             if dim.hflip:
@@ -141,9 +147,10 @@ def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, vali
             cv2.resize(maskL.astype(c_float), dsize=(imgS.shape[1],imgS.shape[0]), dst=maskS_float,
                 interpolation=cv2.INTER_CUBIC)
             if dim.wscale<=dim.fscale:
-                img = np.where(maskL[:, :,None].astype(c_bool), imgL, black[None, None, :])
+                img = np.where(maskL[:, :,None].astype(c_bool), imgL, transparent[None, None, :])
             else:
-                img = np.where(maskS_float[:, :,None].astype(c_bool), imgS, black[None, None, :])
+                img = np.where(maskS_float[:, :,None].astype(c_bool), imgS, transparent[None, None, :])
+            img[circle_idx]=transparent
             img_h, img_w,_ = img.shape
             if vc_frame0.is_set():
                 idx=1
@@ -163,7 +170,7 @@ def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, vali
             elif img_h <= VC_H and img_w <= VC_W:
                 vc_frame[idx,(VC_H//2 - img_h//2):(VC_H//2+(img_h-img_h//2)),(VC_W//2-img_w//2):(VC_W//2+(img_w - img_w//2)), :3] = cv2.cvtColor(
                     img, cv2.COLOR_BGR2RGB)
-
+            vc_frame[idx,:,:,:3]=np.where(vc_frame[idx,:,:,:3]==transparent, background, vc_frame[idx,:,:,:3])
             if vc_frame0.is_set():
                 vc_frame0.clear()
             else:
@@ -205,8 +212,7 @@ if __name__ == '__main__':
 
     terminate = ctx.Event()
     dim = mp.Value(Dim)
-    # valid_ids = find_cam()
-    valid_ids=[0,1,2,3]
+    valid_ids = find_cam()
     dim_init(dim)
 
     window2 = sg.Window('FloatCam Controls', make_layout(valid_ids, dim))
