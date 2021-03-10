@@ -17,7 +17,8 @@ VC_W = 1280
 VC_H = 720
 VC_BUFFER_SIZE = VC_W*VC_H*4*2
 kernel = np.ones((3,3),np.uint8)
-mask_e = 0.7
+border = np.array([50,50,50],dtype=c_uint8)
+mask_e = 0.1
 
 
 def find_cam():
@@ -57,19 +58,32 @@ def lrtbhw(dim, cam):
         h,w=w,h
 
     scale=min(fscale,wscale)
-    maskL=np.zeros((int((h-b-t)/scale), int((w-r-l)/scale)), dtype=c_uint8)
-    maskL_float = np.zeros((int((h-b-t)/scale), int((w-r-l)/scale)), dtype=c_float)
+    hh=h-b-t
+    ww=w-r-l
+    maskL=np.zeros((int((hh)/scale), int((ww)/scale)), dtype=c_uint8)
+    maskL_float = np.zeros((int((hh)/scale), int((ww)/scale)), dtype=c_float)
     maskL_smooth = np.zeros_like(maskL_float)
-    imgL=np.zeros((int((h-b-t)/scale), int((w-r-l)/scale),3), dtype=c_uint8)
-    scale=max(fscale,wscale)
-    imgS=np.zeros((int((h-b-t)/scale), int((w-r-l)/scale),3), dtype=c_uint8)
-    y,x=np.indices((int((h-b-t)/wscale),int((w-r-l)/wscale)))
-    d = min((h-b-t)/wscale,(w-r-l)/wscale)
-    rad=d/2
-    circle_idx=np.sqrt((x-rad)**2 + (y-rad)**2)>0.95*rad
-    maskS_float = np.zeros(imgS.shape[:2], dtype=c_float)
+    imgL=np.zeros((int((hh)/scale), int((ww)/scale),3), dtype=c_uint8)
     hsv=np.zeros_like(imgL)
-    return l,r,t,b, h,w, fscale, wscale, maskL, maskL_float, maskL_smooth, maskS_float, circle_idx, imgL, imgS, hsv
+    y,x=np.indices((int((hh)/scale),int((ww)/scale)))
+    h2,w2= hh/scale/2, ww/scale/2
+    rad=min(h2,w2)
+    circle_idx=np.sqrt((x-w2)**2 + (y-h2)**2)<rad
+    circle_mask=np.zeros_like(maskL)
+    circle_mask[circle_idx]=1
+
+    scale=max(fscale,wscale)
+    imgS=np.zeros((int((hh)/scale), int((ww)/scale),3), dtype=c_uint8)
+    maskS_float = np.zeros(imgS.shape[:2], dtype=c_float)
+
+    # indices for floating circle border
+    y,x=np.indices((int((hh)/fscale),int((ww)/fscale)))
+    h2,w2= hh/fscale/2, ww/fscale/2
+    rad=min(h2,w2)
+    fcircle_idx=np.abs(np.sqrt((x-w2)**2 + (y-h2)**2)-rad)<=1 
+
+    return (l,r,t,b, h,w, fscale, wscale, maskL, maskL_float, maskL_smooth, maskS_float, circle_mask, 
+        fcircle_idx, imgL, imgS, hsv)
 
 def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, valid_ids):
     print(f'update frame valid: {valid_ids}')
@@ -77,7 +91,8 @@ def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, vali
     cam = cv2.VideoCapture(valid_ids[dim.ID])
     cam.set(cv2.CAP_PROP_FRAME_WIDTH, CAP_H)
     cam.set(cv2.CAP_PROP_FRAME_HEIGHT, CAP_W)
-    l,r,t,b,h,w,fscale,wscale, maskL, maskL_float, maskL_smooth, maskS_float, circle_idx,imgL, imgS, hsv=lrtbhw(dim,cam)
+    (l,r,t,b,h,w,fscale,wscale, maskL, maskL_float, maskL_smooth, maskS_float, circle_mask, fcircle_idx, imgL,
+        imgS, hsv)=lrtbhw(dim,cam)
     transparent = np.array([0, 255, 0], dtype=c_uint8)
     background = cv2.imread('background.png')
     cv2.cvtColor(background,cv2.COLOR_BGR2RGB,dst=background)
@@ -100,14 +115,17 @@ def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, vali
                     raise EnvironmentError
                 vc_frame[0,:,:,:3]=background.copy()
                 vc_frame[1,:,:,:3]=background.copy()
-                l,r,t,b,h,w,fscale,wscale, maskL, maskL_float, maskL_smooth, maskS_float, circle_idx, imgL, imgS, hsv=lrtbhw(dim,cam)
-                dim.change = False
+            (l,r,t,b,h,w,fscale,wscale, maskL, maskL_float, maskL_smooth, maskS_float, circle_mask, fcircle_idx,
+                imgL, imgS, hsv)=lrtbhw(dim,cam)
+            dim.change = False
             img = np.rot90(img, dim.rotate)            
             if dim.hflip:
                 img = np.fliplr(img)
-            cv2.resize(img[t:(h-b), l:(w-r), :], dsize=(imgL.shape[1],imgL.shape[0]), dst=imgL,
+            dim.release()
+            img=img[t:(h-b), l:(w-r), :]
+            cv2.resize(img, dsize=(imgL.shape[1],imgL.shape[0]), dst=imgL,
                             interpolation=cv2.INTER_CUBIC)
-            cv2.resize(img[t:(h-b), l:(w-r), :], dsize=(imgS.shape[1],imgS.shape[0]), dst=imgS,
+            cv2.resize(img, dsize=(imgS.shape[1],imgS.shape[0]), dst=imgS,
                             interpolation=cv2.INTER_CUBIC)
             cv2.cvtColor(imgL, cv2.COLOR_BGR2HSV,dst=hsv)
             maskL.fill(0)
@@ -123,34 +141,39 @@ def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, vali
             cv2.dilate(maskL_float, iterations=5, kernel=kernel, dst=maskL_float)
 
             maskL.fill(0)
-            contours, _ = cv2.findContours(maskL_float.astype(c_uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            i=np.argmax(np.array([cv2.contourArea(contour) for contour in contours]))
+            contours, heirarchy = cv2.findContours(maskL_float.astype(c_uint8), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
-            cv2.drawContours(maskL, contours, i, (1,1,1), -1, cv2.LINE_8)
+            main_contour=np.argmax(np.array([cv2.contourArea(contour) for contour in contours]))
+            child_contours=[j for j,heir in enumerate(heirarchy[0]) if (heir[3]==main_contour and
+                cv2.contourArea(contours[j])>20.0)]
+
+            cv2.drawContours(maskL, contours, main_contour, (1,1,1), -1, cv2.LINE_8)
+            for child_contour in child_contours:
+                cv2.drawContours(maskL, contours, child_contour, (0,0,0), -1, cv2.LINE_8)
+            np.multiply(maskL, circle_mask, out=maskL)
             maskL_smooth = mask_e*maskL_smooth + (1-mask_e)*maskL
             cv2.erode(maskL_smooth, iterations=1, kernel=kernel, dst=maskL_smooth)
             cv2.resize((maskL_smooth>0.5).astype(c_float), dsize=(imgS.shape[1],imgS.shape[0]), dst=maskS_float,
                             interpolation=cv2.INTER_CUBIC)
 
-            if dim.fscale<=dim.wscale:
-                img = np.where(maskL_smooth[:, :,None]>0.5, imgL, transparent[None, None, :])
+
+            imgLL=np.where(maskL_smooth[:, :,None]>0.5, imgL, transparent[None, None, :])
+            imgSS=np.where(maskS_float[:, :,None].astype(c_bool), imgS, transparent[None, None, :])
+            if fscale<=wscale:
+                img=imgLL
             else:
-                img = np.where(maskS_float[:, :,None].astype(c_bool), imgS, transparent[None, None, :])
-            dim.release()
+                img=imgSS
+            img[fcircle_idx]=border
             data = cv2.imencode('.png',img)[1][:, 0]
             frame_array = np.frombuffer(frame, dtype=c_uint8)
             frame_array[:data.shape[0]] = data
             new_frame.set()
 
             idx=0
-            cv2.erode(maskL, iterations=5, kernel=kernel, dst=maskL)
-            cv2.resize(maskL.astype(c_float), dsize=(imgS.shape[1],imgS.shape[0]), dst=maskS_float,
-                interpolation=cv2.INTER_CUBIC)
             if dim.wscale<=dim.fscale:
-                img = np.where(maskL[:, :,None].astype(c_bool), imgL, transparent[None, None, :])
+                img = imgLL
             else:
-                img = np.where(maskS_float[:, :,None].astype(c_bool), imgS, transparent[None, None, :])
-            img[circle_idx]=transparent
+                img = imgSS
             img_h, img_w,_ = img.shape
             if vc_frame0.is_set():
                 idx=1

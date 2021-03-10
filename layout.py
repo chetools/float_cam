@@ -36,9 +36,9 @@ def make_layout(valid_ids,dim):
         [sg.Text('Rotate', font=('', 15), pad=(10, (12, 0))),
          sg.Slider(range=(0, 3), orientation='h', size=(20, 20), default_value=dim.rotate, key='rotate', enable_events=True)],
         [sg.Text('Float Scale', font=('', 15), pad=(10, (12, 0))),
-         sg.Slider(range=(1, 24), orientation='h', size=(20, 20), default_value=dim.fscale, resolution=0.25, key='fscale', enable_events=True)],
+         sg.Slider(range=(1, 24), orientation='h', size=(20, 20), default_value=dim.fscale, resolution=0.1, key='fscale', enable_events=True)],
         [sg.Text('Web Scale', font=('', 15), pad=(10, (12, 0))),
-         sg.Slider(range=(1, 24), orientation='h', size=(20, 20), default_value=dim.wscale, resolution=0.25, key='wscale', enable_events=True)],
+         sg.Slider(range=(1, 4), orientation='h', size=(20, 20), default_value=dim.wscale, resolution=0.01, key='wscale', enable_events=True)],
     ]
 
     chroma_camera_layout = [[sg.Column(chroma_layout, element_justification='right', pad=(20, 15))],
@@ -111,7 +111,7 @@ def config(dim, window2, terminate):
 
 
 def dim_init(dim):
-    dim.ID = 3
+    dim.ID = 0
     dim.L = 0
     dim.R = 0
     dim.T = 0
