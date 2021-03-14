@@ -8,7 +8,11 @@ from ctypes import c_bool, c_uint8, c_int, Structure, c_float
 from layout import make_layout, config, dim_init, Dim, handle_key
 import pyvirtualcam
 import signal
-from scipy.interpolate import splprep, splev
+
+import glob
+from pathlib import Path
+import re
+
 
 CAP_W = 1920
 CAP_H = 1080
@@ -41,7 +45,19 @@ def send_vc_frame(vc_frame_buffer, vc_frame0):
                 vc.send(vc_frame[0])
             else:
                 vc.send(vc_frame[1])
-            
+
+def read_background_images():
+    pat=re.compile(r'(\d+)')
+
+    files = glob.glob('background/background*.png')
+    num = np.argsort(np.array([int(pat.search(afile)[1]) for afile in files]))
+    num_background_images=len(files)
+    background_images = np.zeros((num_background_images,720,1280,3))
+
+    for i,afile in enumerate(files):
+        background_images[num[i]]=cv2.cvtColor(cv2.imread(afile),cv2.COLOR_BGR2RGB)
+    return num_background_images, background_images
+
 def lrtbhw(dim, cam):
     w = int(cam.get(3))
     h = int(cam.get(4))
@@ -94,10 +110,13 @@ def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, vali
     (l,r,t,b,h,w,fscale,wscale, maskL, maskL_float, maskL_smooth, maskS_float, circle_mask, fcircle_idx, imgL,
         imgS, hsv)=lrtbhw(dim,cam)
     transparent = np.array([0, 255, 0], dtype=c_uint8)
-    background = cv2.imread('background.png')
-    cv2.cvtColor(background,cv2.COLOR_BGR2RGB,dst=background)
+    num_background, background_images = read_background_images()
+
     frame = np.frombuffer(frame_buffer, dtype=c_uint8)
     vc_frame = np.frombuffer(vc_frame_buffer, dtype=c_uint8).reshape((2, VC_H, VC_W, 4))
+    tstart = time.time()
+    i_background = 0
+    background=background_images[0]
     vc_frame[0,:,:,:3]=background.copy()
     vc_frame[1,:,:,:3]=background.copy()
     while True:
@@ -113,8 +132,15 @@ def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, vali
                     old_ID = dim.ID
                 if not cam:
                     raise EnvironmentError
+                tstart = time.time()
+                i_background = 0
+                background=background_images[0]
                 vc_frame[0,:,:,:3]=background.copy()
                 vc_frame[1,:,:,:3]=background.copy()
+
+            ctime = time.time()
+
+
             (l,r,t,b,h,w,fscale,wscale, maskL, maskL_float, maskL_smooth, maskS_float, circle_mask, fcircle_idx,
                 imgL, imgS, hsv)=lrtbhw(dim,cam)
             dim.change = False
@@ -178,6 +204,12 @@ def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, vali
             if vc_frame0.is_set():
                 idx=1
           
+            if (ctime-tstart)*1000 > 25:
+                tstart=ctime
+                i_background+=1
+                background=background_images[i_background % num_background]
+                vc_frame[idx,:,:,:3]=background.copy()
+
             if img_h > VC_H and img_w > VC_W:
                 vc_frame[idx,:, :, :3] = cv2.cvtColor(img[(img_h//2 - VC_H//2):(img_h//2 + (VC_H - VC_H//2)), 
                     (img_w//2 - VC_W//2):(img_w//2 + (VC_W - VC_W//2))], cv2.COLOR_BGR2RGB)
