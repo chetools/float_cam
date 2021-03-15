@@ -22,7 +22,6 @@ VC_H = 720
 VC_BUFFER_SIZE = VC_W*VC_H*4*2
 kernel = np.ones((3,3),np.uint8)
 border = np.array([50,50,50],dtype=c_uint8)
-mask_e = 0.1
 
 
 def find_cam():
@@ -49,7 +48,7 @@ def send_vc_frame(vc_frame_buffer, vc_frame0):
 def read_background_images():
     pat=re.compile(r'(\d+)')
 
-    files = glob.glob('background/background*.png')
+    files = glob.glob('background/LeagueDark/*.png')
     num = np.argsort(np.array([int(pat.search(afile)[1]) for afile in files]))
     num_background_images=len(files)
     background_images = np.zeros((num_background_images,720,1280,3))
@@ -117,8 +116,6 @@ def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, vali
     tstart = time.time()
     i_background = 0
     background=background_images[0]
-    vc_frame[0,:,:,:3]=background.copy()
-    vc_frame[1,:,:,:3]=background.copy()
     while True:
         try:
             ret, img = cam.read()
@@ -135,8 +132,6 @@ def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, vali
                 tstart = time.time()
                 i_background = 0
                 background=background_images[0]
-                vc_frame[0,:,:,:3]=background.copy()
-                vc_frame[1,:,:,:3]=background.copy()
 
             ctime = time.time()
 
@@ -177,13 +172,11 @@ def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, vali
             for child_contour in child_contours:
                 cv2.drawContours(maskL, contours, child_contour, (0,0,0), -1, cv2.LINE_8)
             np.multiply(maskL, circle_mask, out=maskL)
-            maskL_smooth = mask_e*maskL_smooth + (1-mask_e)*maskL
-            cv2.erode(maskL_smooth, iterations=1, kernel=kernel, dst=maskL_smooth)
-            cv2.resize((maskL_smooth>0.5).astype(c_float), dsize=(imgS.shape[1],imgS.shape[0]), dst=maskS_float,
+            cv2.erode(maskL.astype(c_float), iterations=2, kernel=kernel, dst=maskL_float)
+            cv2.resize(maskL_float, dsize=(imgS.shape[1],imgS.shape[0]), dst=maskS_float,
                             interpolation=cv2.INTER_CUBIC)
 
-
-            imgLL=np.where(maskL_smooth[:, :,None]>0.5, imgL, transparent[None, None, :])
+            imgLL=np.where(maskL_float[:,:,None].astype(c_bool), imgL, transparent[None, None, :])
             imgSS=np.where(maskS_float[:, :,None].astype(c_bool), imgS, transparent[None, None, :])
             if fscale<=wscale:
                 img=imgLL
