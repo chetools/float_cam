@@ -48,7 +48,7 @@ def send_vc_frame(vc_frame_buffer, vc_frame0):
 def read_background_images():
     pat=re.compile(r'(\d+)')
 
-    files = glob.glob('background/LeagueDark/*.png')
+    files = glob.glob('background/chemical_plant/*.png')
     num = np.argsort(np.array([int(pat.search(afile)[1]) for afile in files]))
     num_background_images=len(files)
     background_images = np.zeros((num_background_images,720,1280,3))
