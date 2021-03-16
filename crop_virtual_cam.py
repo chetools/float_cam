@@ -48,7 +48,7 @@ def send_vc_frame(vc_frame_buffer, vc_frame0):
 def read_background_images():
     pat=re.compile(r'(\d+)')
 
-    files = glob.glob('background/chemical_plant/*.png')
+    files = glob.glob('background/chemical_plant_one_image/*.png')
     num = np.argsort(np.array([int(pat.search(afile)[1]) for afile in files]))
     num_background_images=len(files)
     background_images = np.zeros((num_background_images,720,1280,3))
@@ -197,7 +197,7 @@ def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, vali
             if vc_frame0.is_set():
                 idx=1
           
-            if (ctime-tstart)*1000 > 25:
+            if (ctime-tstart)*1000 < 1000:
                 tstart=ctime
                 i_background+=1
                 background=background_images[i_background % num_background]
