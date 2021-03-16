@@ -8,6 +8,7 @@ from ctypes import c_bool, c_uint8, c_int, Structure, c_float
 from layout import make_layout, config, dim_init, Dim, handle_key
 import pyvirtualcam
 import signal
+from color_temp import temp_to_rgb
 
 import glob
 from pathlib import Path
@@ -95,10 +96,11 @@ def lrtbhw(dim, cam):
     y,x=np.indices((int((hh)/fscale),int((ww)/fscale)))
     h2,w2= hh/fscale/2, ww/fscale/2
     rad=min(h2,w2)
-    fcircle_idx=np.abs(np.sqrt((x-w2)**2 + (y-h2)**2)-rad)<=1 
+    fcircle_idx=np.abs(np.sqrt((x-w2)**2 + (y-h2)**2)-rad)<=1
+    cc=temp_to_rgb(dim.temp)/255
 
     return (l,r,t,b, h,w, fscale, wscale, maskL, maskL_float, maskL_smooth, maskS_float, circle_mask, 
-        fcircle_idx, imgL, imgS, hsv)
+        fcircle_idx, imgL, imgS, hsv,cc)
 
 def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, valid_ids):
     print(f'update frame valid: {valid_ids}')
@@ -107,7 +109,7 @@ def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, vali
     cam.set(cv2.CAP_PROP_FRAME_WIDTH, CAP_H)
     cam.set(cv2.CAP_PROP_FRAME_HEIGHT, CAP_W)
     (l,r,t,b,h,w,fscale,wscale, maskL, maskL_float, maskL_smooth, maskS_float, circle_mask, fcircle_idx, imgL,
-        imgS, hsv)=lrtbhw(dim,cam)
+        imgS, hsv,cc)=lrtbhw(dim,cam)
     transparent = np.array([0, 255, 0], dtype=c_uint8)
     num_background, background_images = read_background_images()
 
@@ -116,6 +118,7 @@ def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, vali
     tstart = time.time()
     i_background = 0
     background=background_images[0]
+    tstart = time.time()
     while True:
         try:
             ret, img = cam.read()
@@ -127,17 +130,14 @@ def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, vali
                     cam.set(cv2.CAP_PROP_FRAME_HEIGHT, CAP_H)
                     ret, img = cam.read()
                     old_ID = dim.ID
+                
+                cam.set(cv2.CAP_PROP_GAIN,dim.bright)
                 if not cam:
                     raise EnvironmentError
-                tstart = time.time()
                 i_background = 0
                 background=background_images[0]
-
-            ctime = time.time()
-
-
-            (l,r,t,b,h,w,fscale,wscale, maskL, maskL_float, maskL_smooth, maskS_float, circle_mask, fcircle_idx,
-                imgL, imgS, hsv)=lrtbhw(dim,cam)
+                (l,r,t,b,h,w,fscale,wscale, maskL, maskL_float, maskL_smooth, maskS_float, circle_mask, fcircle_idx,
+                    imgL, imgS, hsv,cc)=lrtbhw(dim,cam)
             dim.change = False
             img = np.rot90(img, dim.rotate)            
             if dim.hflip:
@@ -175,9 +175,8 @@ def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, vali
             cv2.erode(maskL.astype(c_float), iterations=2, kernel=kernel, dst=maskL_float)
             cv2.resize(maskL_float, dsize=(imgS.shape[1],imgS.shape[0]), dst=maskS_float,
                             interpolation=cv2.INTER_CUBIC)
-
-            imgLL=np.where(maskL_float[:,:,None].astype(c_bool), imgL, transparent[None, None, :])
-            imgSS=np.where(maskS_float[:, :,None].astype(c_bool), imgS, transparent[None, None, :])
+            imgLL=np.where(maskL_float[:,:,None].astype(c_bool), (imgL.astype(c_float)*cc[None,None,:]).astype(c_uint8), transparent[None, None, :])
+            imgSS=np.where(maskS_float[:, :,None].astype(c_bool), (imgS.astype(c_float)*cc[None,None,:]).astype(c_uint8), transparent[None, None, :])
             if fscale<=wscale:
                 img=imgLL
             else:
@@ -196,7 +195,8 @@ def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, vali
             img_h, img_w,_ = img.shape
             if vc_frame0.is_set():
                 idx=1
-          
+
+            ctime = time.time()
             if (ctime-tstart)*1000 < 1000:
                 tstart=ctime
                 i_background+=1

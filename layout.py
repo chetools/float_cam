@@ -35,6 +35,10 @@ def make_layout(valid_ids,dim):
          sg.Slider(range=(0, 255), orientation='h', size=(20, 20), default_value=dim.bright_loPass, key='bright_loPass', enable_events=True)],
         [sg.Text('Rotate', font=('', 15), pad=(10, (12, 0))),
          sg.Slider(range=(0, 3), orientation='h', size=(20, 20), default_value=dim.rotate, key='rotate', enable_events=True)],
+        [sg.Text('Brightness', font=('', 15), pad=(10, (12, 0))),
+         sg.Slider(range=(0, 255), orientation='h', size=(20, 20), default_value=dim.bright, resolution=1, key='bright', enable_events=True)],
+        [sg.Text('Temperature', font=('', 15), pad=(10, (12, 0))),
+         sg.Slider(range=(1000, 10000), orientation='h', size=(20, 20), default_value=dim.temp, resolution=50, key='temp', enable_events=True)],
         [sg.Text('Float Scale', font=('', 15), pad=(10, (12, 0))),
          sg.Slider(range=(1, 24), orientation='h', size=(20, 20), default_value=dim.fscale, resolution=0.1, key='fscale', enable_events=True)],
         [sg.Text('Web Scale', font=('', 15), pad=(10, (12, 0))),
@@ -53,7 +57,8 @@ def make_layout(valid_ids,dim):
 
 
 class Dim(Structure):
-    _fields_ = [('change', c_bool), ('ID', c_int), ('T', c_int), ('B', c_int), ('L', c_int), ('R', c_int), ('fscale', c_float), ('wscale', c_float),
+    _fields_ = [('change', c_bool), ('ID', c_int), ('T', c_int), ('B', c_int), ('L', c_int), ('R', c_int), ('bright', c_float), ('temp', c_int), 
+                ('fscale', c_float), ('wscale', c_float),
                 ('rotate', c_int), ('hflip', c_bool), ('hue_loPass',
                                                        c_int), ('hue_hiPass', c_int), ('sat_loPass', c_int),
                 ('bright_loPass', c_int)]
@@ -90,6 +95,10 @@ def config(dim, window2, terminate):
                 dim.B = int(values['B'])
             elif event == 'rotate':
                 dim.rotate = int(values['rotate'])
+            elif event == 'bright':
+                dim.bright = int(values['bright'])
+            elif event == 'temp':
+                dim.temp = int(values['temp'])
             elif event == 'hflip':
                 dim.hflip = bool(values['hflip'])
             elif event == 'fscale':
@@ -119,10 +128,12 @@ def dim_init(dim):
     dim.fscale = 2.
     dim.wscale = 2. 
     dim.rotate = 0
+    dim.bright =1.
+    dim.temp = 5000
     dim.hflip = True
     dim.hue_loPass = 40
     dim.hue_hiPass = 90
-    dim.sat_loPass = 90
-    dim.bright_loPass = 20
+    dim.sat_loPass = 0
+    dim.bright_loPass = 0
 
 
