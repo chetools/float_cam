@@ -23,6 +23,7 @@ VC_H = 720
 VC_BUFFER_SIZE = VC_W*VC_H*3*2
 kernel = np.ones((3,3),np.uint8)
 border = np.array([50,50,50],dtype=c_uint8)
+sleep=0.01
 
 
 def find_cam():
@@ -45,6 +46,7 @@ def send_vc_frame(vc_frame_buffer, vc_frame0):
                 vc.send(vc_frame[0])
             else:
                 vc.send(vc_frame[1])
+            time.sleep(sleep)
 
 def read_background_images():
     pat=re.compile(r'(\d+)')
@@ -157,8 +159,8 @@ def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, vali
             np.logical_or(
                 np.less(hsv[:, :, 2], dim.bright_loPass), maskL, out=maskL)
             np.multiply(maskL, circle_mask, out=maskL)
-            cv2.erode(maskL.astype(c_float), iterations=3, kernel=kernel, dst=maskL_float)
-            cv2.dilate(maskL_float, iterations=3, kernel=kernel, dst=maskL_float)
+            cv2.erode(maskL.astype(c_float), iterations=4, kernel=kernel, dst=maskL_float)
+            cv2.dilate(maskL_float, iterations=2, kernel=kernel, dst=maskL_float)
 
 
             maskL.fill(0)
@@ -228,8 +230,8 @@ def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, vali
             dim.change = False
             dim.release()
             # raise EnvironmentError
-            pass
-        # time.sleep(0.03)
+
+        time.sleep(sleep)
 
 
 if __name__ == '__main__':
@@ -297,6 +299,8 @@ if __name__ == '__main__':
             frame_array = np.frombuffer(frame_buffer, dtype=c_uint8)
             window['image'].Update(data=frame_array.tobytes())
             new_frame.clear()
+        time.sleep(sleep)
+
 
     
 

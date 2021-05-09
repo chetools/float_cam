@@ -1,5 +1,6 @@
 import PySimpleGUI as sg
 from ctypes import c_bool, c_uint8, c_int, Structure, c_float
+import time
 
 sg.theme('DarkBlack1')
 sg.theme_slider_color('#303050')
@@ -8,16 +9,16 @@ sg.theme_slider_color('#303050')
 def make_layout(valid_ids,dim):
 
     top_height_layout = [[sg.Text('V-Crop', font=('', 15), pad=((30, 0), (15, 0)))],
-                         [sg.Slider(range=(100, 0), orientation='v', size=(16, 25), pad=((10, 0), (10, 25)), default_value=0, key='T', enable_events=True),
-                          sg.Slider(range=(0, 100), orientation='v', size=(16, 25), pad=((10, 5), (10, 25)), default_value=0, key='B', enable_events=True)]
+                         [sg.Slider(range=(100, 0), orientation='v', size=(16, 25), pad=((10, 0), (10, 25)), default_value=dim.T, key='T', enable_events=True),
+                          sg.Slider(range=(0, 100), orientation='v', size=(16, 25), pad=((10, 5), (10, 25)), default_value=dim.B, key='B', enable_events=True)]
                          ]
 
     left_width_layout = [[
         sg.Column([[sg.Text('H-Crop', font=('', 15), pad=((30, 0), (8, 0)))]]), 
         sg.Column([[sg.Slider(range=(0, 100), orientation='h', size=(25, 20), pad=((10, 26), 10),
-                                                                         default_value=0, key='L', enable_events=True)],
+                                                                         default_value=dim.L, key='L', enable_events=True)],
         [sg.Slider(range=(100, 0), orientation='h', size=(25, 20), pad=((10, 26), (0, 10)),
-                                                                           default_value=0, key='R', enable_events=True)]])]]
+                                                                           default_value=dim.R, key='R', enable_events=True)]])]]
 
     cam_flip_layout = [sg.Text('Camera', font=('', 18), pad=(5, (16, 27))),
                        sg.Spin(list(range(0, len(valid_ids))), initial_value=dim.ID, font=('', 20), pad=((0, 30), (18, 27)), key='ID',
@@ -117,22 +118,23 @@ def config(dim, window2, terminate):
         if event is None or event == sg.WIN_CLOSED or event == 'Exit':
             terminate.set()
             break
+        time.sleep(0.2)
 
 
 def dim_init(dim):
     dim.ID = 0
-    dim.L = 0
-    dim.R = 0
-    dim.T = 11
-    dim.B = 21
+    dim.L = 9
+    dim.R = 7
+    dim.T = 14
+    dim.B = 26
     dim.fscale = 4.5
-    dim.wscale = 1.3 
+    dim.wscale = 1.05 
     dim.rotate = 0
     dim.bright =1.
     dim.temp = 5000
     dim.hflip = True
-    dim.hue_loPass = 44
-    dim.hue_hiPass = 80
+    dim.hue_loPass = 49
+    dim.hue_hiPass = 90
     dim.sat_loPass = 70
-    dim.bright_loPass = 95
+    dim.bright_loPass = 70
 
