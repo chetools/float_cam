@@ -23,7 +23,7 @@ VC_H = 720
 VC_BUFFER_SIZE = VC_W*VC_H*3*2
 kernel = np.ones((3,3),np.uint8)
 border = np.array([50,50,50],dtype=c_uint8)
-sleep=0.01
+sleep=0
 
 
 def find_cam():

@@ -20,9 +20,10 @@ CAP_H = 1080
 CAP_BUFFER_SIZE = CAP_W*CAP_H*3
 VC_W = 1280
 VC_H = 720
-VC_BUFFER_SIZE = VC_W*VC_H*4*2
+VC_BUFFER_SIZE = VC_W*VC_H*3*2
 kernel = np.ones((3,3),np.uint8)
 border = np.array([50,50,50],dtype=c_uint8)
+sleep=0
 
 
 def find_cam():
@@ -37,14 +38,15 @@ def find_cam():
             pass
     return(valid_id)
 
-def send_vc_frame(vc_frame_buffer, vc_frame0):
-    vc_frame = np.frombuffer(vc_frame_buffer, dtype=c_uint8).reshape((2, VC_H, VC_W, 4))
-    with pyvirtualcam.Camera(width=VC_W, height=VC_H, fps=30) as vc:
-        while True:
-            if vc_frame0.is_set():
-                vc.send(vc_frame[0])
-            else:
-                vc.send(vc_frame[1])
+# def send_vc_frame(vc_frame_buffer, vc_frame0):
+#     vc_frame = np.frombuffer(vc_frame_buffer, dtype=c_uint8).reshape((2, VC_H, VC_W, 3))
+#     with pyvirtualcam.Camera(width=VC_W, height=VC_H, fps=30) as vc:
+#         while True:
+#             if vc_frame0.is_set():
+#                 vc.send(vc_frame[0])
+#             else:
+#                 vc.send(vc_frame[1])
+#             time.sleep(sleep)
 
 def read_background_images():
     pat=re.compile(r'(\d+)')
@@ -85,8 +87,8 @@ def lrtbhw(dim, cam):
     h2,w2= hh/scale/2, ww/scale/2
     rad=min(h2,w2)
     circle_idx=np.sqrt((x-w2)**2 + (y-h2)**2)<rad
-    circle_mask=np.zeros_like(maskL_float)
-    circle_mask[circle_idx]=1.
+    circle_mask=np.zeros_like(maskL)
+    circle_mask[circle_idx]=1
 
     scale=max(fscale,wscale)
     imgS=np.zeros((int((hh)/scale), int((ww)/scale),3), dtype=c_uint8)
@@ -114,7 +116,7 @@ def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, vali
     num_background, background_images = read_background_images()
 
     frame = np.frombuffer(frame_buffer, dtype=c_uint8)
-    vc_frame = np.frombuffer(vc_frame_buffer, dtype=c_uint8).reshape((2, VC_H, VC_W, 4))
+    vc_frame = np.frombuffer(vc_frame_buffer, dtype=c_uint8).reshape((2, VC_H, VC_W, 3))
     tstart = time.time()
     i_background = 0
     background=background_images[0]
@@ -156,22 +158,23 @@ def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, vali
                 np.less(hsv[:, :, 1], dim.sat_loPass), maskL, out=maskL)
             np.logical_or(
                 np.less(hsv[:, :, 2], dim.bright_loPass), maskL, out=maskL)
-            cv2.erode(maskL.astype(c_float), iterations=5, kernel=kernel, dst=maskL_float)
-            cv2.dilate(maskL_float, iterations=5, kernel=kernel, dst=maskL_float)
+            np.multiply(maskL, circle_mask, out=maskL)
+            cv2.erode(maskL.astype(c_float), iterations=4, kernel=kernel, dst=maskL_float)
+            cv2.dilate(maskL_float, iterations=2, kernel=kernel, dst=maskL_float)
 
-            # maskL.fill(0)
-            # contours, heirarchy = cv2.findContours(maskL_float.astype(c_uint8), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-            # if len(contours)>0:
-            #     main_contour=np.argmax(np.array([cv2.contourArea(contour) for contour in contours]))
-            #     child_contours=[j for j,heir in enumerate(heirarchy[0]) if (heir[3]==main_contour and
-            #         cv2.contourArea(contours[j])>20.0)]
 
-            #     cv2.drawContours(maskL, contours, main_contour, (1,1,1), -1, cv2.LINE_8)
-            #     for child_contour in child_contours:
-            #         cv2.drawContours(maskL, contours, child_contour, (0,0,0), -1, cv2.LINE_8)
-            np.multiply(maskL_float, circle_mask, out=maskL_float)
+            maskL.fill(0)
+            contours, heirarchy = cv2.findContours(maskL_float.astype(c_uint8), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+            if len(contours)>0:
+                main_contour=np.argmax(np.array([cv2.contourArea(contour) for contour in contours]))
+                child_contours=[j for j,heir in enumerate(heirarchy[0]) if (heir[3]==main_contour and
+                    cv2.contourArea(contours[j])>3.0)]
 
-            cv2.erode(maskL_float, iterations=2, kernel=kernel, dst=maskL_float)
+                cv2.drawContours(maskL, contours, main_contour, (1,1,1), -1, cv2.LINE_8)
+                for child_contour in child_contours:
+                    cv2.drawContours(maskL, contours, child_contour, (0,0,0), -1, cv2.LINE_8)
+
+            cv2.erode(maskL.astype(c_float), iterations=2, kernel=kernel, dst=maskL_float)
             cv2.resize(maskL_float, dsize=(imgS.shape[1],imgS.shape[0]), dst=maskS_float,
                             interpolation=cv2.INTER_CUBIC)
             imgLL=np.where(maskL_float[:,:,None].astype(c_bool), (imgL.astype(c_float)*cc[None,None,:]).astype(c_uint8), transparent[None, None, :])
@@ -186,49 +189,49 @@ def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, vali
             frame_array[:data.shape[0]] = data
             new_frame.set()
 
-            idx=0
-            if dim.wscale<=dim.fscale:
-                img = imgLL
-            else:
-                img = imgSS
-            img_h, img_w,_ = img.shape
-            if vc_frame0.is_set():
-                idx=1
+            # idx=0
+            # if dim.wscale<=dim.fscale:
+            #     img = imgLL
+            # else:
+            #     img = imgSS
+            # img_h, img_w,_ = img.shape
+            # if vc_frame0.is_set():
+            #     idx=1
 
-            ctime = time.time()
-            if (ctime-tstart)*1000 > 500 :
-                tstart=ctime
-                i_background+=1
-                background=background_images[i_background % num_background]
-                vc_frame[idx,:,:,:3]=background.copy()
+            # ctime = time.time()
+            # if (ctime-tstart)*1000 > 500 :
+            #     tstart=ctime
+            #     i_background+=1
+            #     background=background_images[i_background % num_background]
+            #     vc_frame[idx,:,:]=background.copy()
 
-            if img_h > VC_H and img_w > VC_W:
-                vc_frame[idx,:, :, :3] = cv2.cvtColor(img[(img_h//2 - VC_H//2):(img_h//2 + (VC_H - VC_H//2)), 
-                    (img_w//2 - VC_W//2):(img_w//2 + (VC_W - VC_W//2))], cv2.COLOR_BGR2RGB)
+            # if img_h > VC_H and img_w > VC_W:
+            #     vc_frame[idx,:, :] = cv2.cvtColor(img[(img_h//2 - VC_H//2):(img_h//2 + (VC_H - VC_H//2)), 
+            #         (img_w//2 - VC_W//2):(img_w//2 + (VC_W - VC_W//2))], cv2.COLOR_BGR2RGB)
 
-            elif img_h > VC_H and img_w <= VC_W:
-                vc_frame[idx,:,(VC_W//2-img_w//2):(VC_W//2+(img_w - img_w//2)), :3] = cv2.cvtColor(
-                    img[(img_h//2 - VC_H//2):(img_h//2 + (VC_H - VC_H//2)), :], cv2.COLOR_BGR2RGB)
+            # elif img_h > VC_H and img_w <= VC_W:
+            #     vc_frame[idx,:,(VC_W//2-img_w//2):(VC_W//2+(img_w - img_w//2))] = cv2.cvtColor(
+            #         img[(img_h//2 - VC_H//2):(img_h//2 + (VC_H - VC_H//2)), :], cv2.COLOR_BGR2RGB)
 
-            elif img_h <= VC_H and img_w > VC_W:
-                vc_frame[idx,(VC_H//2 - img_h//2):(VC_H//2+(img_h-img_h//2)), :, :3] = cv2.cvtColor(
-                    img[:, (img_w//2 - VC_W//2):(img_w//2 + (VC_W - VC_W//2))], cv2.COLOR_BGR2RGB)
+            # elif img_h <= VC_H and img_w > VC_W:
+            #     vc_frame[idx,(VC_H//2 - img_h//2):(VC_H//2+(img_h-img_h//2)), :] = cv2.cvtColor(
+            #         img[:, (img_w//2 - VC_W//2):(img_w//2 + (VC_W - VC_W//2))], cv2.COLOR_BGR2RGB)
 
-            elif img_h <= VC_H and img_w <= VC_W:
-                vc_frame[idx,(VC_H//2 - img_h//2):(VC_H//2+(img_h-img_h//2)),(VC_W//2-img_w//2):(VC_W//2+(img_w - img_w//2)), :3] = cv2.cvtColor(
-                    img, cv2.COLOR_BGR2RGB)
-            vc_frame[idx,:,:,:3]=np.where(vc_frame[idx,:,:,:3]==transparent, background, vc_frame[idx,:,:,:3])
-            if vc_frame0.is_set():
-                vc_frame0.clear()
-            else:
-                vc_frame0.set()
+            # elif img_h <= VC_H and img_w <= VC_W:
+            #     vc_frame[idx,(VC_H//2 - img_h//2):(VC_H//2+(img_h-img_h//2)),(VC_W//2-img_w//2):(VC_W//2+(img_w - img_w//2))] = cv2.cvtColor(
+            #         img, cv2.COLOR_BGR2RGB)
+            # vc_frame[idx,:,:]=np.where(vc_frame[idx,:,:]==transparent, background, vc_frame[idx,:,:])
+            # if vc_frame0.is_set():
+            #     vc_frame0.clear()
+            # else:
+            #     vc_frame0.set()
 
         except:
             dim.change = False
             dim.release()
-            raise EnvironmentError
-            pass
-        # time.sleep(0.03)
+            # raise EnvironmentError
+
+        time.sleep(sleep)
 
 
 if __name__ == '__main__':
@@ -272,16 +275,16 @@ if __name__ == '__main__':
         frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, valid_ids), daemon=True)
     update_frame_proc.start()
 
-    send_vc_frame_proc = (ctx.Process(target=send_vc_frame, args=(
-        vc_frame_buffer, vc_frame0), daemon=True))
-    send_vc_frame_proc.start()
+    # send_vc_frame_proc = (ctx.Process(target=send_vc_frame, args=(
+    #     vc_frame_buffer, vc_frame0), daemon=True))
+    # send_vc_frame_proc.start()
 
     def keyboard_interrupt_handler(signal, frame):
         window.close()
         window2.close()
         config_proc.stop()
         update_frame_proc.stop()
-        send_vc_frame_proc.stop()
+        # send_vc_frame_proc.stop()
         exit()
 
     signal.signal(signal.SIGINT, keyboard_interrupt_handler)
@@ -296,6 +299,8 @@ if __name__ == '__main__':
             frame_array = np.frombuffer(frame_buffer, dtype=c_uint8)
             window['image'].Update(data=frame_array.tobytes())
             new_frame.clear()
+        time.sleep(sleep)
+
 
     
 
