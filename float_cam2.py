@@ -22,7 +22,7 @@ VC_W = 1280
 VC_H = 720
 VC_BUFFER_SIZE = VC_W*VC_H*3*2
 kernel = np.ones((3,3),np.uint8)
-border = np.array([50,50,50],dtype=c_uint8)
+border = np.array([80,80,80],dtype=c_uint8)
 sleep=0
 
 
@@ -98,7 +98,7 @@ def lrtbhw(dim, cam):
     y,x=np.indices((int((hh)/fscale),int((ww)/fscale)))
     h2,w2= hh/fscale/2, ww/fscale/2
     rad=min(h2,w2)
-    fcircle_idx=np.abs(np.sqrt((x-w2)**2 + (y-h2)**2)-rad)<=1
+    fcircle_idx=np.abs(np.sqrt((x-w2)**2 + (y-h2)**2)-rad)<=1.5
     cc=temp_to_rgb(dim.temp)/255
 
     return (l,r,t,b, h,w, fscale, wscale, maskL, maskL_float, maskL_smooth, maskS_float, circle_mask, 
@@ -159,8 +159,9 @@ def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, vali
             np.logical_or(
                 np.less(hsv[:, :, 2], dim.bright_loPass), maskL, out=maskL)
             np.multiply(maskL, circle_mask, out=maskL)
-            cv2.erode(maskL.astype(c_float), iterations=4, kernel=kernel, dst=maskL_float)
-            cv2.dilate(maskL_float, iterations=2, kernel=kernel, dst=maskL_float)
+            maskL_float = maskL.astype(c_float)
+            # cv2.erode(maskL.astype(c_float), iterations=1, kernel=kernel, dst=maskL_float)
+            # cv2.dilate(maskL_float, iterations=1, kernel=kernel, dst=maskL_float)
 
 
             maskL.fill(0)
@@ -168,13 +169,15 @@ def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, vali
             if len(contours)>0:
                 main_contour=np.argmax(np.array([cv2.contourArea(contour) for contour in contours]))
                 child_contours=[j for j,heir in enumerate(heirarchy[0]) if (heir[3]==main_contour and
-                    cv2.contourArea(contours[j])>3.0)]
+                    cv2.contourArea(contours[j])>5.0)]
 
                 cv2.drawContours(maskL, contours, main_contour, (1,1,1), -1, cv2.LINE_8)
                 for child_contour in child_contours:
                     cv2.drawContours(maskL, contours, child_contour, (0,0,0), -1, cv2.LINE_8)
 
-            cv2.erode(maskL.astype(c_float), iterations=2, kernel=kernel, dst=maskL_float)
+            # maskL_float = maskL.astype(c_float)
+            cv2.erode(maskL.astype(c_float), iterations=1, kernel=kernel, dst=maskL_float)
+            
             cv2.resize(maskL_float, dsize=(imgS.shape[1],imgS.shape[0]), dst=maskS_float,
                             interpolation=cv2.INTER_CUBIC)
             imgLL=np.where(maskL_float[:,:,None].astype(c_bool), (imgL.astype(c_float)*cc[None,None,:]).astype(c_uint8), transparent[None, None, :])
@@ -183,7 +186,7 @@ def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, vali
                 img=imgLL
             else:
                 img=imgSS
-            img[fcircle_idx]=border
+            # img[fcircle_idx]=border
             data = cv2.imencode('.png',img)[1][:, 0]
             frame_array = np.frombuffer(frame, dtype=c_uint8)
             frame_array[:data.shape[0]] = data

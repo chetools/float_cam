@@ -123,18 +123,18 @@ def config(dim, window2, terminate):
 
 def dim_init(dim):
     dim.ID = 0
-    dim.L = 9
-    dim.R = 7
-    dim.T = 14
-    dim.B = 26
-    dim.fscale = 4.5
-    dim.wscale = 1.05 
+    dim.L = 0
+    dim.R = 0
+    dim.T = 9
+    dim.B = 0
+    dim.fscale = 1.5
+    dim.wscale = 4
     dim.rotate = 0
     dim.bright =1.
-    dim.temp = 5000
-    dim.hflip = True
-    dim.hue_loPass = 49
-    dim.hue_hiPass = 90
-    dim.sat_loPass = 70
-    dim.bright_loPass = 70
+    dim.temp = 5500
+    dim.hflip = False
+    dim.hue_loPass = 60
+    dim.hue_hiPass = 77
+    dim.sat_loPass = 85
+    dim.bright_loPass = 110
 

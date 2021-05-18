@@ -22,7 +22,7 @@ VC_W = 1280
 VC_H = 720
 VC_BUFFER_SIZE = VC_W*VC_H*3*2
 kernel = np.ones((3,3),np.uint8)
-border = np.array([50,50,50],dtype=c_uint8)
+border = np.array([80,80,80],dtype=c_uint8)
 sleep=0
 
 
@@ -159,8 +159,10 @@ def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, vali
             np.logical_or(
                 np.less(hsv[:, :, 2], dim.bright_loPass), maskL, out=maskL)
             np.multiply(maskL, circle_mask, out=maskL)
-            cv2.erode(maskL.astype(c_float), iterations=4, kernel=kernel, dst=maskL_float)
-            cv2.dilate(maskL_float, iterations=2, kernel=kernel, dst=maskL_float)
+
+            maskL_float = maskL.astype(c_float)
+            # cv2.erode(maskL.astype(c_float), iterations=1, kernel=kernel, dst=maskL_float)
+            # cv2.dilate(maskL_float, iterations=1, kernel=kernel, dst=maskL_float)
 
 
             maskL.fill(0)
@@ -174,7 +176,7 @@ def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, vali
                 for child_contour in child_contours:
                     cv2.drawContours(maskL, contours, child_contour, (0,0,0), -1, cv2.LINE_8)
 
-            cv2.erode(maskL.astype(c_float), iterations=2, kernel=kernel, dst=maskL_float)
+            cv2.erode(maskL.astype(c_float), iterations=1, kernel=kernel, dst=maskL_float)
             cv2.resize(maskL_float, dsize=(imgS.shape[1],imgS.shape[0]), dst=maskS_float,
                             interpolation=cv2.INTER_CUBIC)
             imgLL=np.where(maskL_float[:,:,None].astype(c_bool), (imgL.astype(c_float)*cc[None,None,:]).astype(c_uint8), transparent[None, None, :])
@@ -183,7 +185,7 @@ def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, vali
                 img=imgLL
             else:
                 img=imgSS
-            img[fcircle_idx]=border
+            # img[fcircle_idx]=border
             data = cv2.imencode('.png',img)[1][:, 0]
             frame_array = np.frombuffer(frame, dtype=c_uint8)
             frame_array[:data.shape[0]] = data
