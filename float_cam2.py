@@ -61,10 +61,11 @@ def read_background_images():
     return num_background_images, background_images
 
 def lrtbhw(dim, cam):
-    w = int(cam.get(3))
-    h = int(cam.get(4))
+    ret, img = cam.read()
+    h,w,_=img.shape
     L, T, R, B = dim.L, dim.T, dim.R, dim.B
-
+    if dim.rotate==1 or dim.rotate==3:
+        h,w=w,h
     l = int(w*L/100)
     r = int(w*R/100)
     t = int(h*T/100)
@@ -72,8 +73,7 @@ def lrtbhw(dim, cam):
     fscale = dim.fscale
     wscale = dim.wscale
     scale=min(fscale,wscale)
-    if dim.rotate==1 or dim.rotate==3:
-        h,w=w,h
+
 
     scale=min(fscale,wscale)
     hh=h-b-t
