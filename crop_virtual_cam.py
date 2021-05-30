@@ -108,8 +108,8 @@ def update_frames(frame_buffer, new_frame, vc_frame_buffer, vc_frame0, dim, vali
     print(f'update frame valid: {valid_ids}')
     old_ID = dim.ID
     cam = cv2.VideoCapture(valid_ids[dim.ID])
-    cam.set(cv2.CAP_PROP_FRAME_WIDTH, CAP_H)
-    cam.set(cv2.CAP_PROP_FRAME_HEIGHT, CAP_W)
+    cam.set(cv2.CAP_PROP_FRAME_WIDTH, CAP_W)
+    cam.set(cv2.CAP_PROP_FRAME_HEIGHT, CAP_H)
     (l,r,t,b,h,w,fscale,wscale, maskL, maskL_float, maskL_smooth, maskS_float, circle_mask, fcircle_idx, imgL,
         imgS, hsv,cc)=lrtbhw(dim,cam)
     transparent = np.array([0, 255, 0], dtype=c_uint8)
